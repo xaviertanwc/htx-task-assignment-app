@@ -1,0 +1,40 @@
+{
+  "name": "task-assignment-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "db:embedded": "tsx scripts/embeddedDb.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@google/genai": "^2.32.0",
+    "express": "^5.3.0",
+    "helmet": "^8.3.0",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.19.43",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "eslint": "^9.39.5",
+    "supertest": "^7.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^3.2.7"
+  }
+}
