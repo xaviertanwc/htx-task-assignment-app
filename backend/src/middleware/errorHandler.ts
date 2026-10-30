@@ -8,6 +8,7 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
     return;
   }
   if (error instanceof AppError) {
+    if (error.status >= 500) req.log?.error({ err: error }, error.message);
     res.status(error.status).json({
       error: { code: error.code, message: error.message, details: error.details },
     });

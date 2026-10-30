@@ -47,6 +47,8 @@ export function createTaskService(db: Db, skillIdentifier: SkillIdentifier): Tas
         503,
         'SKILL_IDENTIFICATION_FAILED',
         'Skills could not be identified automatically right now. Nothing was saved. Try again, or select the skills yourself.',
+        undefined,
+        { cause: error },
       );
     }
 
