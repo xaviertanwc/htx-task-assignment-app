@@ -1,0 +1,393 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c2430;
+  --muted: #5d6877;
+  --border: #d5dae1;
+  --accent: #1f5fbf;
+  --accent-text: #ffffff;
+  --accent-soft: #e4edfa;
+  --danger: #b3261e;
+  --danger-soft: #fcebea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181e;
+    --surface: #1d232b;
+    --text: #e8ebef;
+    --muted: #a0aab6;
+    --border: #38414c;
+    --accent: #7fb0f5;
+    --accent-text: #10233f;
+    --accent-soft: #233650;
+    --danger: #f2a29c;
+    --danger-soft: #3d2120;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+a {
+  color: var(--accent);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.container {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+main.container {
+  padding-top: 24px;
+  padding-bottom: 48px;
+}
+
+.app-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+}
+
+.app-name {
+  font-weight: 600;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 16px;
+}
+
+.app-header nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 0;
+}
+
+.app-header nav a.active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+button,
+.button {
+  display: inline-block;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled),
+.button:hover {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.button-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+select,
+textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+select:disabled {
+  opacity: 0.6;
+}
+
+textarea {
+  display: block;
+  resize: vertical;
+}
+
+textarea[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.muted,
+.hint {
+  color: var(--muted);
+}
+
+.hint {
+  font-size: 0.87rem;
+}
+
+.empty {
+  padding: 40px 16px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.banner {
+  margin: 16px 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+}
+
+.banner-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Task list */
+
+.task-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.task-table th,
+.task-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.task-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.task-table th {
+  font-size: 0.87rem;
+  color: var(--muted);
+}
+
+.task-table th:nth-child(2),
+.task-table td:nth-child(2) {
+  width: 170px;
+}
+
+.task-table th:nth-child(3),
+.task-table td:nth-child(3),
+.task-table th:nth-child(4),
+.task-table td:nth-child(4) {
+  width: 160px;
+}
+
+.cell-title {
+  padding-left: calc(14px + var(--depth, 0) * 22px) !important;
+}
+
+.subtask-row .cell-title {
+  border-left: 0;
+}
+
+.subtask-tag {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.ai-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.row-error {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: 0.87rem;
+}
+
+/* Task creation */
+
+.draft {
+  margin: 0 0 12px;
+  padding: 12px 14px 14px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.draft-number {
+  padding: 0 6px;
+  font-size: 0.87rem;
+  font-weight: 600;
+}
+
+.draft label[for] {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.87rem;
+  color: var(--muted);
+}
+
+.field-error {
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 0.87rem;
+}
+
+.draft-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 10px;
+}
+
+.skills-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+.skills-label {
+  font-size: 0.87rem;
+  color: var(--muted);
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.draft-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.draft-children {
+  margin-left: 22px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+  .task-table,
+  .task-table tbody,
+  .task-table tr,
+  .task-table td {
+    display: block;
+    width: 100% !important;
+  }
+
+  .task-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .task-table tr {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .task-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .task-table td {
+    padding: 4px 0;
+    border-bottom: 0;
+  }
+
+  .task-table td[data-label] {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .task-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.87rem;
+  }
+
+  .cell-title {
+    padding-left: calc(var(--depth, 0) * 10px) !important;
+  }
+
+  .draft-children {
+    margin-left: 10px;
+  }
+}
