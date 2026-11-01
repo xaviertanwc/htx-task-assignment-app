@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
@@ -6,6 +7,9 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { openDatabase, type Database } from '../../src/db/database.js';
 import { runSeed } from '../../src/db/seed.js';
 import { createSkillRepository } from '../../src/features/skills/skill.repository.js';
+import { taskSchema } from '../../src/features/tasks/task.schemas.js';
+import { developerSchema } from '../../src/features/developers/developer.schemas.js';
+import { skillSchema } from '../../src/features/skills/skill.schemas.js';
 import { createTaskRepository } from '../../src/features/tasks/task.repository.js';
 import { retryPendingSkillsOnce } from '../../src/jobs/retryPendingSkills.js';
 import {
@@ -39,6 +43,9 @@ beforeAll(async () => {
     pool: database.pool,
     skillIdentifier: { identify: (titles, skills) => identify(titles, skills) },
     logger: pino({ level: 'silent' }),
+    corsAllowedOrigins: [],
+    rateLimit: { windowMs: 60_000, max: 100_000 },
+    trustProxyHops: 0,
   });
 });
 
@@ -63,6 +70,8 @@ const retryDependencies = () => ({
 const createTask = async (body: object) => {
   const res = await request(app).post('/api/v1/tasks').send(body);
   expect(res.status).toBe(201);
+  // Keeps the published OpenAPI schema honest against what the API really returns.
+  taskSchema.parse(res.body.data);
   return res.body.data;
 };
 const patchTask = (id: number, body: object) =>
@@ -97,6 +106,15 @@ describe('seed data', () => {
 });
 
 describe('reading developers and skills', () => {
+  it('matches the published response schemas', async () => {
+    const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
+    await patchTask(task.id, { assigneeId: ALICE }).expect(200);
+    const skills = await request(app).get('/api/v1/skills');
+    z.array(skillSchema).parse(skills.body.data);
+    const developers = await request(app).get('/api/v1/developers');
+    z.array(developerSchema).parse(developers.body.data);
+  });
+
   it('reads one skill, and 404s on an unknown one', async () => {
     expect((await request(app).get(`/api/v1/skills/${BACKEND}`)).body.data.name).toBe('Backend');
     expect((await request(app).get('/api/v1/skills/999')).status).toBe(404);

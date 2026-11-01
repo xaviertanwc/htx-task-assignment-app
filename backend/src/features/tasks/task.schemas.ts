@@ -1,20 +1,26 @@
 import { z } from 'zod';
 import { AppError } from '../../shared/errors.js';
 import { idSchema } from '../../shared/params.js';
+import { skillSummarySchema } from '../../shared/responses.js';
 
 export const TASK_STATUSES = ['To-do', 'In Progress', 'Done'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+export const taskStatusSchema = z.enum(TASK_STATUSES).meta({ id: 'TaskStatus' });
 
 export const MAX_TASKS_PER_REQUEST = 100;
 export const MAX_NESTING_DEPTH = 10;
 
-const taskInputSchema = z.strictObject({
-  title: z.string().trim().min(1, 'Title is required.').max(500),
-  skillIds: z.array(idSchema).default([]),
-  get subtasks() {
-    return z.array(taskInputSchema).default([]);
-  },
-});
+export const taskInputSchema = z
+  .strictObject({
+    title: z.string().trim().min(1, 'Title is required.').max(500),
+    skillIds: z.array(idSchema).default([]).meta({
+      description: 'Leave empty to have the skills identified automatically.',
+    }),
+    get subtasks() {
+      return z.array(taskInputSchema).default([]);
+    },
+  })
+  .meta({ id: 'TaskInput' });
 
 export type TaskInput = z.infer<typeof taskInputSchema>;
 
@@ -47,15 +53,36 @@ export function parseCreateTask(body: unknown): TaskInput {
   return taskInputSchema.parse(body);
 }
 
-const updateTaskSchema = z
+export const updateTaskSchema = z
   .strictObject({
-    status: z.enum(TASK_STATUSES).optional(),
+    status: taskStatusSchema.optional(),
     assigneeId: idSchema.nullable().optional(),
   })
   .refine((body) => body.status !== undefined || body.assigneeId !== undefined, {
     message: 'Provide status and/or assigneeId.',
-  });
+  })
+  .meta({ id: 'TaskUpdate' });
 
 export type TaskUpdate = z.infer<typeof updateTaskSchema>;
 
 export const parseUpdateTask = (body: unknown): TaskUpdate => updateTaskSchema.parse(body);
+
+export const taskSchema = z
+  .object({
+    id: z.number().int(),
+    title: z.string(),
+    status: taskStatusSchema,
+    parentTaskId: z.number().int().nullable(),
+    assignee: z.object({ id: z.number().int(), name: z.string() }).nullable(),
+    skills: z.array(skillSummarySchema),
+    skillsSource: z.enum(['user', 'llm', 'pending']).meta({
+      description:
+        '"pending" means skills are still being identified; the task cannot be assigned until they are.',
+    }),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+    get subtasks() {
+      return z.array(taskSchema);
+    },
+  })
+  .meta({ id: 'Task' });

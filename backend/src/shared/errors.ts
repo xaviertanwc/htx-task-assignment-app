@@ -1,5 +1,5 @@
 /** Why a request failed, in domain terms. The HTTP layer decides how each kind is reported. */
-export type ErrorKind = 'invalid' | 'not_found' | 'conflict' | 'unprocessable';
+export type ErrorKind = 'invalid' | 'not_found' | 'conflict' | 'unprocessable' | 'rate_limited';
 
 export class AppError extends Error {
   constructor(

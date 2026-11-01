@@ -3,3 +3,5 @@ dist
 package-lock.json
 .data
 coverage
+openapi.json
+schema.gen.ts

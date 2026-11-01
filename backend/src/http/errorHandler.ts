@@ -7,6 +7,7 @@ const STATUS_BY_KIND: Record<ErrorKind, number> = {
   not_found: 404,
   conflict: 409,
   unprocessable: 422,
+  rate_limited: 429,
 };
 
 export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {

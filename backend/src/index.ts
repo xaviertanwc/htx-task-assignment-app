@@ -41,12 +41,16 @@ const skillIdentifier = config.GEMINI_API_KEY
     })
   : unconfiguredSkillIdentifier;
 
-const server = createApp({ pool: database.pool, skillIdentifier, logger }).listen(
-  config.PORT,
-  () => {
-    logger.info({ port: config.PORT }, 'Server listening');
-  },
-);
+const server = createApp({
+  pool: database.pool,
+  skillIdentifier,
+  logger,
+  corsAllowedOrigins: config.CORS_ALLOWED_ORIGINS,
+  rateLimit: { windowMs: config.RATE_LIMIT_WINDOW_MS, max: config.RATE_LIMIT_MAX },
+  trustProxyHops: config.TRUST_PROXY_HOPS,
+}).listen(config.PORT, () => {
+  logger.info({ port: config.PORT }, 'Server listening');
+});
 
 const retryJob: RetryJob | undefined = config.GEMINI_API_KEY
   ? startRetryPendingSkillsJob(
