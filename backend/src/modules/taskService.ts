@@ -54,10 +54,7 @@ export function createTaskService(db: Db, skillIdentifier: SkillIdentifier): Tas
 
     const idByName = new Map(catalogue.map((skill) => [skill.name, skill.id]));
     return new Map(
-      unspecified.map((node, index) => [
-        node,
-        answers[index]!.map((name) => idByName.get(name)!),
-      ]),
+      unspecified.map((node, index) => [node, answers[index]!.map((name) => idByName.get(name)!)]),
     );
   }
 

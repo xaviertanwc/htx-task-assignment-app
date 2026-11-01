@@ -41,7 +41,10 @@ export default async function setup(project: TestProject) {
   await postgres.initialise();
   await postgres.start();
   await postgres.createDatabase('task_assignment_test');
-  project.provide('databaseUrl', `postgres://postgres:postgres@localhost:${port}/task_assignment_test`);
+  project.provide(
+    'databaseUrl',
+    `postgres://postgres:postgres@localhost:${port}/task_assignment_test`,
+  );
 
   return async () => {
     await postgres.stop();

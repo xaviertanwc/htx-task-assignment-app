@@ -153,7 +153,9 @@ describe('creating tasks', () => {
   });
 
   it('rejects unknown skill ids without saving', async () => {
-    const res = await request(app).post('/api/tasks').send({ title: 'x', skillIds: [999] });
+    const res = await request(app)
+      .post('/api/tasks')
+      .send({ title: 'x', skillIds: [999] });
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('UNKNOWN_SKILLS');
     expect((await request(app).get('/api/tasks')).body).toEqual([]);
@@ -193,10 +195,7 @@ describe('identifying skills with the LLM', () => {
 
     const root = await createTask({
       title: 'Needs LLM',
-      subtasks: [
-        { title: 'User chose', skillIds: [FRONTEND] },
-        { title: 'Also needs LLM' },
-      ],
+      subtasks: [{ title: 'User chose', skillIds: [FRONTEND] }, { title: 'Also needs LLM' }],
     });
 
     expect(calls).toEqual([

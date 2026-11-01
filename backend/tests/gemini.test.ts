@@ -25,7 +25,10 @@ describe('parseAnswer', () => {
     ['missing text', undefined],
     ['the wrong shape', '{"skills": []}'],
     ['a title with no answer', '[{"index": 0, "skills": ["Frontend"]}]'],
-    ['only unknown skills', '[{"index": 0, "skills": ["Cooking"]}, {"index": 1, "skills": ["Backend"]}]'],
+    [
+      'only unknown skills',
+      '[{"index": 0, "skills": ["Cooking"]}, {"index": 1, "skills": ["Backend"]}]',
+    ],
   ])('rejects %s', (_name, text) => {
     expect(() => parseAnswer(text, 2, SKILLS)).toThrow();
   });

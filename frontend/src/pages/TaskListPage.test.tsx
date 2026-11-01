@@ -66,7 +66,10 @@ describe('TaskListPage', () => {
     renderApp('/');
     const user = userEvent.setup();
 
-    await user.selectOptions(await screen.findByRole('combobox', { name: 'Assignee of Task' }), '1');
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: 'Assignee of Task' }),
+      '1',
+    );
     await waitFor(() =>
       expect(sent).toContainEqual({ route: 'PATCH /api/tasks/1', body: { assigneeId: 1 } }),
     );

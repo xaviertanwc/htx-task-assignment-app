@@ -111,10 +111,10 @@ export async function insertTask(db: Queryable, task: NewTask): Promise<number> 
     [task.title, task.parentTaskId, task.skillsSource],
   );
   const id = rows[0]!.id;
-  await db.query(
-    `INSERT INTO task_skills (task_id, skill_id) SELECT $1, unnest($2::int[])`,
-    [id, task.skillIds],
-  );
+  await db.query(`INSERT INTO task_skills (task_id, skill_id) SELECT $1, unnest($2::int[])`, [
+    id,
+    task.skillIds,
+  ]);
   return id;
 }
 
