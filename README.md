@@ -1,18 +1,18 @@
 # Task Assignment App
 
-A full-stack application for creating tasks with nested subtasks and assigning them to developers with the right skills. When a task is created without skills, the backend identifies them from the title using an LLM.
+Create tasks with nested subtasks and assign them to developers who have the right skills. When a task is created without skills, the backend identifies them from the title using an LLM.
 
-| Layer    | Technology                                        |
-| -------- | ------------------------------------------------- |
-| Frontend | TypeScript, React, Vite                           |
-| Backend  | TypeScript, Node.js, Express                      |
-| Database | PostgreSQL                                        |
-| LLM      | Google Gemini API                                 |
-| Runtime  | Docker Compose                                    |
+| Layer    | Technology                                                       |
+| -------- | ---------------------------------------------------------------- |
+| Frontend | TypeScript, React, Vite, TanStack Query                          |
+| Backend  | TypeScript, Node.js, Express                                     |
+| Database | PostgreSQL: embedded by default, or any server through config    |
+| LLM      | Google Gemini API, behind a swappable interface                  |
+| Runtime  | Docker Compose                                                   |
 
 ## Quick start
 
-Requires Docker with Compose.
+Requires Docker with Compose 2.20 or later.
 
 ```bash
 cp .env.example .env
@@ -24,81 +24,170 @@ Set `GEMINI_API_KEY` in `.env` ([get a key](https://aistudio.google.com/apikey))
 docker compose up --build
 ```
 
-- App: http://localhost:8080
-- API: http://localhost:3000/api
+| What            | Where                              |
+| --------------- | ---------------------------------- |
+| App             | http://localhost:8080              |
+| API             | http://localhost:3000/api/v1       |
+| API docs        | http://localhost:3000/api/v1/docs  |
+| Health check    | http://localhost:3000/health       |
 
-Migrations and seed data are applied automatically when the backend starts. To reset all data, run `docker compose down -v`.
+The first start takes longer because it initialises the database. Migrations and seed data are applied automatically on every start.
 
-The app runs without a key, but creating a task with no skills selected returns an error. Tasks with skills selected work normally.
+No key? The app still runs. Tasks created with no skills are saved as "pending" and can't be assigned until a key is configured. Tasks with skills selected aren't affected.
 
-### Configuration
+To remove all data, run `docker compose down -v`.
 
-Docker Compose reads these from `.env`. All are optional.
+### Using an external PostgreSQL server
 
-| Variable            | Default                 | Purpose                                            |
-| ------------------- | ----------------------- | -------------------------------------------------- |
-| `GEMINI_API_KEY`    | (none)                  | Needed to identify skills automatically            |
-| `GEMINI_MODEL`      | `gemini-3.5-flash-lite` | Gemini model to use                                |
-| `POSTGRES_USER`     | `postgres`              | Database user                                      |
-| `POSTGRES_PASSWORD` | `postgres`              | Database password; change it outside local use     |
-| `POSTGRES_DB`       | `task_assignment`       | Database name                                      |
-| `BACKEND_PORT`      | `3000`                  | Host port for the API                              |
-| `FRONTEND_PORT`     | `8080`                  | Host port for the web app                          |
+Switching needs configuration only, with no code changes.
 
-The backend also accepts `DATABASE_URL`, `PORT`, `LOG_LEVEL` and `GEMINI_BASE_URL` (for routing Gemini traffic through a proxy) when run outside Compose.
+**To use the optional `postgres` service in Compose,** uncomment these two lines in `.env`:
+
+```bash
+DB_MODE=external
+DATABASE_URL=postgres://postgres:postgres@postgres:5432/task_assignment
+```
+
+Then start with the profile enabled:
+
+```bash
+docker compose --profile external up --build
+```
+
+**To use your own server,** set `DATABASE_URL` to point at it, and leave out `--profile external`. The database must already exist. Migrations and seed data are applied on start.
+
+## Configuration
+
+Docker Compose reads these from `.env`. Every setting is optional unless noted, and the app reports all invalid settings by name at startup, without printing their values.
+
+| Variable                  | Default                 | Purpose                                                       |
+| ------------------------- | ----------------------- | ------------------------------------------------------------- |
+| `DB_MODE`                 | `embedded`              | `embedded` or `external`                                      |
+| `DATABASE_URL`            | (none)                  | Connection URL. **Required** when `DB_MODE=external`          |
+| `DB_EMBEDDED_DATA_DIR`    | `.data/postgres`        | Embedded data directory. Docker uses `/app/data/postgres`     |
+| `DB_EMBEDDED_PORT`        | `55432`                 | Embedded port, reachable only from the same machine or container |
+| `DB_EMBEDDED_USER`        | `postgres`              | Embedded user                                                 |
+| `DB_EMBEDDED_PASSWORD`    | `postgres`              | Embedded password                                             |
+| `DB_EMBEDDED_NAME`        | `task_assignment`       | Embedded database name                                        |
+| `GEMINI_API_KEY`          | (none)                  | Needed to identify skills automatically                       |
+| `GEMINI_MODEL`            | `gemini-3.5-flash-lite` | Gemini model                                                  |
+| `GEMINI_BASE_URL`         | (none)                  | Routes Gemini traffic through a proxy. Not passed through Compose |
+| `SKILL_RETRY_INTERVAL_MS` | `60000`                 | How often pending tasks are retried                           |
+| `PORT`                    | `3000`                  | Backend port inside its container or process                  |
+| `LOG_LEVEL`               | `info`                  | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`  |
+| `CORS_ALLOWED_ORIGINS`    | (empty)                 | Comma-separated origins. Empty means same-origin only         |
+| `RATE_LIMIT_WINDOW_MS`    | `60000`                 | Rate limit window, per client address                         |
+| `RATE_LIMIT_MAX`          | `300`                   | Requests allowed per window                                   |
+| `TRUST_PROXY_HOPS`        | `0`                     | Proxies in front of the API. Compose sets `1` for nginx       |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `postgres`, `postgres`, `task_assignment` | Optional `postgres` service only. Keep `DATABASE_URL` in step |
+| `BACKEND_PORT`, `FRONTEND_PORT` | `3000`, `8080`    | Host ports in Compose                                         |
 
 ## Local development
 
-Requires Node.js 20.11 or later. You need three terminals.
+Requires Node.js 20.11 or later, and a `.env` file at the repository root (`cp .env.example .env`). No database installation is needed, because the backend starts embedded PostgreSQL itself.
 
-**1. Database.** Run the bundled embedded Postgres, which needs no installation, or point `DATABASE_URL` in the next step at your own instance:
-
-```bash
-cd backend && npm install && npm run db:embedded
-```
-
-**2. Backend** on port 3000:
+Backend, on port 3000:
 
 ```bash
-cd backend && DATABASE_URL=postgres://postgres:postgres@localhost:5432/task_assignment GEMINI_API_KEY=your-key npm run dev
+cd backend && npm install && npm run dev
 ```
 
-**3. Frontend** on http://localhost:5173, proxying `/api` to the backend:
+Frontend, on http://localhost:5173, proxying `/api` to the backend:
 
 ```bash
 cd frontend && npm install && npm run dev
 ```
 
-### Tests and checks
+### Scripts
 
 Run these in `backend/` or `frontend/`:
 
-```bash
-npm test
-```
+| Script                 | What it does                               |
+| ---------------------- | ------------------------------------------ |
+| `npm test`             | Runs the tests                             |
+| `npm run lint`         | ESLint                                     |
+| `npm run format:check` | Checks formatting (`npm run format` fixes) |
+| `npm run typecheck`    | TypeScript                                 |
+| `npm run build`        | Production build                           |
+
+Backend only:
+
+| Script            | What it does                                                    |
+| ----------------- | --------------------------------------------------------------- |
+| `npm run migrate` | Applies pending migrations, then exits                          |
+| `npm run seed`    | Applies seed data, then exits. Safe to repeat                   |
+| `npm run openapi` | Regenerates `openapi.json` from the schemas                     |
+
+Frontend only: `npm run gen:api` regenerates `src/shared/api/schema.gen.ts` from `backend/openapi.json`. Tests fail if `openapi.json` is stale, and CI fails if the generated types are.
+
+### Migrations and seed data
+
+The server applies both on every start, so you rarely need to run them by hand.
+
+- **Migrations** are numbered SQL files in [`backend/migrations`](backend/migrations). Each runs once, in order, in its own transaction, and an advisory lock stops two instances migrating at once.
+- **Seed data** is in [`backend/src/db/seed.ts`](backend/src/db/seed.ts). It only inserts rows that are missing, so repeating it changes nothing.
+
+In **embedded mode**, stop the server before running `npm run migrate` or `npm run seed`, because only one process can use a data directory. In **external mode**, you can run them at any time. Inside a running container, use:
 
 ```bash
-npm run lint
+docker compose exec backend node dist/cli/migrate.js
 ```
 
-```bash
-npm run typecheck
-```
+### Tests
 
-Backend tests run against a real, temporary PostgreSQL that starts automatically. Set `TEST_DATABASE_URL` to use your own instead. The Gemini client is tested against a local HTTP server, so no API key is needed and no external calls are made.
+Backend tests start a real, temporary PostgreSQL automatically. To run them against your own server, set `TEST_DATABASE_URL`; they truncate tasks, so use a disposable database. The LLM is always mocked: the Gemini client is tested against a local HTTP server, so no key is needed.
 
-## System design
+| Suite                     | Covers                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `backend/tests/unit`      | Business rules, the service over in-memory fakes, config, LLM prompt, parsing, retries and fallback, retry job |
+| `backend/tests/integration` | The API against real PostgreSQL, concurrency, database modes, restarts, CORS, rate limiting, API docs |
+| `frontend/src`            | Task list and creation pages, plus tree and draft logic                                |
+
+## Architecture
 
 ```mermaid
 flowchart LR
-  Browser -->|"/"| Nginx["nginx: static SPA"]
-  Browser -->|"/api"| Nginx
-  Nginx -->|proxy| API["Express API"]
-  API --> DB[(PostgreSQL)]
-  API -->|"tasks with no skills"| Gemini["Gemini API"]
+  Browser --> Nginx["nginx: SPA and /api proxy"]
+  Nginx --> API
+  subgraph Backend container
+    API["Express API"] --> DB[("PostgreSQL (embedded)")]
+    Job["Skill retry job"] --> DB
+  end
+  API --> Gemini["Gemini API"]
+  Job --> Gemini
+  API -. "DB_MODE=external" .-> Ext[("PostgreSQL server")]
 ```
 
-The backend has three layers: routes parse and validate HTTP input, `taskService` holds the business rules, and `taskRepository` holds the SQL.
+### Backend layers
+
+Dependencies point one way. Business rules know nothing about HTTP or SQL, so they can be unit tested on their own.
+
+```mermaid
+flowchart TD
+  R["routes: parse and validate HTTP input"] --> S["services: orchestrate a use case"]
+  S --> RU["task.rules: pure business rules"]
+  S --> Rep["repositories: SQL, behind interfaces"]
+  S --> L["llm: SkillIdentifier interface"]
+  Rep --> D["db: the only module that knows the database mode"]
+  L --> G["gemini: one implementation"]
+```
+
+```text
+backend/src/
+  cli/          migrate, seed and OpenAPI export commands
+  config/       environment validation
+  db/           connection factory, embedded process, migrations, seed
+  features/     tasks, developers, skills: routes → service → repository, plus schemas
+  http/         app assembly, error handling, OpenAPI document
+  jobs/         background retry of pending skills
+  llm/          SkillIdentifier interface, Gemini, prompt, answer parsing
+  shared/       domain errors, shared schemas
+
+frontend/src/
+  app/          routes and layout
+  features/     tasks (api, components, lib, pages), developers, skills
+  shared/       typed API client, generated types, reusable UI
+```
 
 ### Database schema
 
@@ -111,68 +200,78 @@ erDiagram
   developers |o--o{ tasks : "assigned to"
   tasks |o--o{ tasks : "parent of"
 
-  developers { int id PK
-    text name }
-  skills { int id PK
-    text name UK }
-  tasks { int id PK
+  developers {
+    int id PK
+    text name
+  }
+  skills {
+    int id PK
+    text name UK
+    text description
+  }
+  developer_skills {
+    int developer_id PK,FK
+    int skill_id PK,FK
+  }
+  task_skills {
+    int task_id PK,FK
+    int skill_id PK,FK
+  }
+  tasks {
+    int id PK
     text title
-    task_status status
+    task_status status "To-do, In Progress, Done"
     int assignee_id FK
     int parent_task_id FK
-    skills_source skills_source }
+    skills_source skills_source "user, llm, pending"
+    timestamptz created_at
+    timestamptz updated_at
+  }
 ```
 
-- **Subtasks** are rows in `tasks` that point to a parent through `parent_task_id`. A subtask therefore has every property of a task, and nesting depth is unlimited at the schema level. Trees are read with a recursive query.
-- **Status** is a Postgres enum: `To-do`, `In Progress`, `Done`.
-- **`skills_source`** records whether a task's skills came from the user or the LLM, and the UI marks LLM-identified skills with an "AI" tag.
-- **Migrations** are plain SQL files in [`backend/migrations`](backend/migrations), applied once each, in order. Seed data is a migration too, so it can't be applied twice.
+Only standard PostgreSQL features are used, so behaviour is the same in both modes.
 
 ### Business rules
 
-Both rules are enforced on the backend. The frontend also applies them to its dropdowns so users aren't offered choices that would fail.
+**Assignment.** A developer must have every skill a task requires. A task whose skills are still pending can't be assigned, because nobody can be shown to qualify.
 
-**Assignment.** A developer must have every skill the task requires. Carol is the only seeded developer who can take a task that needs both Frontend and Backend.
+**Done.** A task can only move to `Done` when all its direct subtasks are `Done`. As each subtask follows the same rule, it holds for the whole tree. Reopening a subtask under a `Done` parent is rejected as well, since it would break the rule: the parent must be reopened first. I chose this over reopening the parent automatically, so a status never changes without someone asking for it.
 
-**Done.** A task can only move to `Done` when all its direct subtasks are `Done`. Because each subtask follows the same rule, this holds for the whole tree.
+**Concurrency.** Each update runs in a transaction that locks the parent row, then the task's row. This stops a parent going `Done` at the same moment its subtask is reopened. Locks are always taken parent first, which also rules out deadlocks. An integration test races these two updates to confirm it.
 
-The reverse case also has to be handled: reopening a subtask under a `Done` parent would break the rule. That request is rejected, and the parent must be reopened first. I chose this over reopening the parent automatically, so a status never changes without someone asking for it.
-
-**Concurrency.** Checking these rules and then writing could race: a parent could move to `Done` at the same moment a subtask is reopened. Each update runs in a transaction that locks the parent row, then the task's own row. Locks are always taken parent first, which also prevents deadlocks. An integration test runs these two updates concurrently to check the rule holds.
+**Subtask trees.** Trees are created in one transaction, so a failure saves nothing. A request can hold up to 100 tasks, nested up to 10 levels. Cycles can't occur: a parent is set once at insert, no API changes it, and a `CHECK` rejects self-reference. Reads use one statement with a recursive query for a subtree, so there are no N+1 queries.
 
 ### Skill identification
 
-When a task tree is created, all tasks without skills are sent to Gemini in **one request**, which keeps latency down and uses less of the rate limit than one call per subtask.
+When a tree is created, all tasks without skills go to the LLM in **one request**, which keeps latency down and uses less quota than one call per subtask.
 
-- **Constrained output.** The request uses a JSON response schema whose skill values are limited to those in the database, so adding a skill to the `skills` table makes it available to the model. The response is validated again on receipt, because the schema is not a guarantee.
-- **Untrusted input.** Task titles are sent as JSON data, and the prompt tells the model not to follow instructions in them. Even a successful injection could only produce a choice among valid skills.
-- **Reliability.** Each attempt has a 15-second timeout, and there are up to 3 attempts with exponential backoff. Invalid answers are retried too.
-- **Provider independence.** Gemini sits behind a small `SkillIdentifier` interface, so changing provider means adding one implementation.
+- **Driven by the database.** The prompt contains no skill names. Names and descriptions come from the `skills` table.
+- **Validated output.** The request sets a JSON response schema limited to known skills, and answers are validated again on receipt, per title.
+- **Untrusted input.** Titles are sent as JSON data, and the prompt says not to follow instructions inside them. Even a successful injection could only pick from valid skills.
+- **Reliability.** Each attempt has a 15-second timeout, with up to 3 attempts and exponential backoff.
 
-**If identification fails, the request returns 503 and nothing is saved.** The form keeps what the user entered, so they can retry or select skills themselves. The LLM call happens before the database transaction opens, so a slow response doesn't hold a connection.
-
-The trade-off is that task creation with no skills selected depends on Gemini being available. The alternative is to save the task and identify skills in the background, which would keep creation working during an outage. However, it adds a state where a task has no known skills and can't be safely assigned, plus a retry worker to clear that state. I kept the simpler design for this scope, and a background queue would be the natural next step in production.
+**If identification fails, the task is still created,** with `skillsSource: "pending"`. The failure is logged, assignment is blocked, and the UI explains why. A background job retries pending tasks every minute, and the list refreshes itself while any are pending. A title the LLM can't resolve stays pending without affecting the others in the tree.
 
 ## API
 
-The base path is `/api`. Bodies are JSON.
+The base path is `/api/v1`. Interactive docs are at `/api/v1/docs`, and the OpenAPI 3.1 document at `/api/v1/openapi.json`. Both are generated from the same schemas that validate requests.
 
-| Method  | Path               | Description                                    |
-| ------- | ------------------ | ---------------------------------------------- |
-| `GET`   | `/tasks`           | List top-level tasks, newest first, with nested subtasks |
-| `GET`   | `/tasks/:id`       | Read a task and its subtree                    |
-| `POST`  | `/tasks`           | Create a task and any nested subtasks          |
-| `PATCH` | `/tasks/:id`       | Change status and/or assignee                  |
-| `GET`   | `/developers`      | List developers with skills and assigned tasks |
-| `GET`   | `/developers/:id`  | Read a developer                               |
-| `GET`   | `/skills`          | List skills                                    |
-| `GET`   | `/skills/:id`      | Read a skill                                   |
+| Method  | Path               | Description                                               |
+| ------- | ------------------ | --------------------------------------------------------- |
+| `GET`   | `/tasks`           | List top-level tasks, newest first, with nested subtasks  |
+| `GET`   | `/tasks/:id`       | Read a task and its subtree                               |
+| `POST`  | `/tasks`           | Create a task and any nested subtasks                     |
+| `PATCH` | `/tasks/:id`       | Change status and/or assignee                             |
+| `GET`   | `/developers`      | List developers with skills and assigned tasks            |
+| `GET`   | `/developers/:id`  | Read a developer                                          |
+| `GET`   | `/skills`          | List skills                                               |
+| `GET`   | `/skills/:id`      | Read a skill                                              |
 
-`GET /health` (outside `/api`) checks database connectivity.
+`GET /health`, outside the versioned path, returns `200 {"status":"ok"}`, or `503 {"status":"unavailable"}` if the database can't be reached.
 
 ### Create a task
 
-`POST /api/tasks`. `skillIds` and `subtasks` are optional. Tasks with no `skillIds` have their skills identified by the LLM.
+`POST /api/v1/tasks`. `skillIds` and `subtasks` are optional. New tasks start as `To-do` and unassigned.
 
 ```json
 {
@@ -185,22 +284,25 @@ The base path is `/api`. Bodies are JSON.
 }
 ```
 
-A request can hold up to 100 tasks, nested up to 10 levels deep. New tasks start as `To-do` and unassigned.
-
-The response is `201` with the created task:
+Successful responses wrap their result in `data`. This returns `201`:
 
 ```json
 {
-  "id": 1,
-  "title": "As a logged-in user, I want to update my profile",
-  "status": "To-do",
-  "parentTaskId": null,
-  "assignee": null,
-  "skills": [{ "id": 1, "name": "Frontend" }, { "id": 2, "name": "Backend" }],
-  "skillsSource": "user",
-  "createdAt": "2026-10-30T15:00:00.000Z",
-  "updatedAt": "2026-10-30T15:00:00.000Z",
-  "subtasks": []
+  "data": {
+    "id": 1,
+    "title": "As a logged-in user, I want to update my profile",
+    "status": "To-do",
+    "parentTaskId": null,
+    "assignee": null,
+    "skills": [
+      { "id": 1, "name": "Frontend" },
+      { "id": 2, "name": "Backend" }
+    ],
+    "skillsSource": "user",
+    "createdAt": "2026-11-01T09:00:00.000Z",
+    "updatedAt": "2026-11-01T09:00:00.000Z",
+    "subtasks": []
+  }
 }
 ```
 
@@ -208,7 +310,7 @@ The response is `201` with the created task:
 
 ### Update a task
 
-`PATCH /api/tasks/:id`. Provide either field or both; the update is all-or-nothing. Set `assigneeId` to `null` to unassign.
+`PATCH /api/v1/tasks/:id`. Provide either field or both; the update is all-or-nothing. Set `assigneeId` to `null` to unassign.
 
 ```json
 { "status": "Done", "assigneeId": 3 }
@@ -216,61 +318,103 @@ The response is `201` with the created task:
 
 ### Errors
 
-Errors share one format, and `details` is included where useful:
-
 ```json
 { "error": { "code": "SUBTASKS_NOT_DONE", "message": "...", "details": {} } }
 ```
 
-| Status | Code                          | Meaning                                       |
-| ------ | ----------------------------- | --------------------------------------------- |
-| 400    | `VALIDATION_ERROR`            | The body failed validation                    |
-| 400    | `INVALID_ID`                  | The id in the path isn't a valid integer      |
-| 400    | `TASK_TREE_TOO_LARGE`         | Over the task count or nesting limit          |
-| 400    | `BAD_REQUEST`                 | The body is malformed or too large            |
+| Status | Code                       | Meaning                                      |
+| ------ | -------------------------- | -------------------------------------------- |
+| 400    | `VALIDATION_ERROR`         | The body failed validation                   |
+| 400    | `INVALID_ID`               | The id in the path isn't a valid integer     |
+| 400    | `TASK_TREE_TOO_LARGE`      | Over the task count or nesting limit         |
+| 400    | `BAD_REQUEST`              | The body is malformed or too large           |
 | 404    | `TASK_NOT_FOUND`, `DEVELOPER_NOT_FOUND`, `SKILL_NOT_FOUND` | The resource in the path doesn't exist |
-| 404    | `ROUTE_NOT_FOUND`             | No such route                                 |
-| 409    | `SUBTASKS_NOT_DONE`           | Marking `Done` with unfinished subtasks       |
-| 409    | `PARENT_TASK_DONE`            | Reopening a subtask under a `Done` parent     |
-| 422    | `UNKNOWN_SKILLS`              | `skillIds` contains an unknown skill          |
-| 422    | `DEVELOPER_NOT_FOUND`         | `assigneeId` doesn't match a developer        |
-| 422    | `DEVELOPER_MISSING_SKILLS`    | The developer lacks a required skill          |
-| 503    | `SKILL_IDENTIFICATION_FAILED` | The LLM failed; nothing was saved             |
+| 404    | `ROUTE_NOT_FOUND`          | No such route                                |
+| 409    | `SUBTASKS_NOT_DONE`        | Marking `Done` with unfinished subtasks      |
+| 409    | `PARENT_TASK_DONE`         | Reopening a subtask under a `Done` parent    |
+| 409    | `TASK_SKILLS_PENDING`      | Assigning a task whose skills aren't known   |
+| 422    | `UNKNOWN_SKILLS`           | `skillIds` contains an unknown skill         |
+| 422    | `DEVELOPER_NOT_FOUND`      | `assigneeId` doesn't match a developer       |
+| 422    | `DEVELOPER_MISSING_SKILLS` | The developer lacks a required skill         |
+| 429    | `RATE_LIMITED`             | Too many requests                            |
+| 500    | `INTERNAL_ERROR`           | Unexpected server error                      |
 
-## Libraries
+## How to extend
+
+### Add developer or skill management
+
+These are read-only today, by design. Developers, skills and their join tables are already normal rows, and nothing in the code or UI assumes particular skills exist.
+
+1. Add a method to the feature's repository, such as `create` in `features/skills/skill.repository.ts`.
+2. Add a service method for any rules, such as rejecting a duplicate name.
+3. Add a route and a zod schema, then register the path in `http/openapi.ts`.
+4. Run `npm run openapi` and `npm run gen:api`, then add a form under `frontend/src/features/skills`.
+
+New skills reach the LLM and the UI automatically. Fill in a useful `description`, as the LLM relies on it.
+
+If you allow removing a skill from a developer, or changing a task's skills, re-check assigned tasks at that point. Today these rules are only checked at assignment, because those relations can't change.
+
+### Swap the LLM provider
+
+Implement `SkillIdentifier` from [`llm/skillIdentifier.ts`](backend/src/llm/skillIdentifier.ts), reusing `buildUserContent` and `parseAnswer`, then construct it in `src/index.ts`. Nothing else changes.
+
+### Swap the database
+
+Set `DB_MODE=external` and `DATABASE_URL`. No code outside [`db/database.ts`](backend/src/db/database.ts) knows which mode is in use. To copy existing data across, use `pg_dump` and `pg_restore`.
+
+## Key decisions and trade-offs
+
+| Decision | Why | Trade-off |
+| -------- | --- | --------- |
+| Embedded PostgreSQL by default | One container and no setup, with real PostgreSQL behaviour | The package is only published with beta version tags, and it limits you to one backend instance. Use an external server for production |
+| Raw SQL through `pg` | Row locks and recursive queries are central here, and clearer in SQL than through an ORM | More hand-written mapping |
+| Create the task first, identify skills later if needed | An LLM outage shouldn't stop people recording work | A "pending" state and a retry job to maintain |
+| Block assigning pending tasks | Never bypasses the skill rule | Without a working key, those tasks can't be assigned |
+| OpenAPI generated from zod | Docs and validation can't disagree, and tests check real responses against them | The path list in `openapi.ts` is still written by hand |
+| Generated types instead of an npm workspace | Shares the API contract while each package stays its own Docker build context | One extra step when the API changes, enforced by CI |
+| Filtering on the client | Instant, and simple while all tasks are loaded anyway | Needs server-side filtering and pagination at large scale |
+| Native `<select>`, `<dialog>` and checkboxes | Keyboard and screen reader support come built in | Options can't hold rich content, so reasons appear as text |
+
+## Dependencies
 
 ### Backend
 
-| Library            | Why                                                                                     |
-| ------------------ | --------------------------------------------------------------------------------------- |
-| `express`          | Widely known and minimal. Version 5 forwards rejected async handlers to the error handler. |
-| `pg`               | Direct SQL. Row locks and recursive queries are central here, and are clearer in SQL than through an ORM. |
-| `zod`              | Validates requests and environment variables, with TypeScript types derived from the schemas. |
-| `@google/genai`    | Google's official Gemini SDK.                                                           |
-| `helmet`           | Sets secure HTTP headers with one line.                                                 |
-| `pino`, `pino-http`| Structured JSON logs with per-request context.                                          |
+| Package                | Why                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| `express`              | Widely known and minimal. Version 5 forwards rejected async handlers to the error handler   |
+| `pg`                   | Connection pooling and direct SQL                                                           |
+| `embedded-postgres`    | Real PostgreSQL with no installation: the default database. Pinned exactly, as it's published as beta |
+| `zod`                  | Validates requests and environment variables, and generates the OpenAPI schemas             |
+| `@google/genai`        | Google's official Gemini SDK                                                                |
+| `helmet`               | Secure HTTP headers                                                                         |
+| `cors`                 | Standard, environment-driven CORS handling                                                  |
+| `express-rate-limit`   | Basic abuse protection, mainly because `POST /tasks` can spend LLM quota                    |
+| `swagger-ui-express`   | Serves the interactive API docs                                                             |
+| `pino`, `pino-http`    | Structured JSON logs with per-request context                                               |
 
-Development only: `typescript`, `tsx` (run TypeScript in watch mode), `vitest` and `supertest` (tests), `embedded-postgres` (real Postgres for tests without Docker), `eslint` and `typescript-eslint` (linting).
+Development only: `typescript`, `tsx` (runs TypeScript with reload), `vitest` and `supertest` (tests), `eslint` and `typescript-eslint` (linting), `prettier` (formatting), and `@types/*`.
 
-Migrations use a short custom runner, as the app only needs forward-only SQL files.
+Migrations use a short custom runner, because the app only needs forward-only SQL files.
 
 ### Frontend
 
-| Library                 | Why                                                                                       |
-| ----------------------- | ----------------------------------------------------------------------------------------- |
-| `react`, `react-dom`    | Required by the brief.                                                                    |
-| `vite`                  | Fast development server and production build. An SPA doesn't need a server-rendering framework. |
-| `react-router-dom`      | Client-side routing between the two pages.                                                |
-| `@tanstack/react-query` | Handles server state: caching, loading and error states, and refetching after updates.    |
+| Package                 | Why                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `react`, `react-dom`    | Required by the brief                                                                                      |
+| `react-router-dom`      | Routing, URL-backed filters, and the navigation blocking behind the discard confirmation                   |
+| `@tanstack/react-query` | Server state: caching, refetching, optimistic updates with rollback, and ordered mutations. Hand-rolling these would be more code and more bugs |
 
-Development only: `vitest`, `jsdom` and Testing Library (tests), `eslint` with `typescript-eslint` and `eslint-plugin-react-hooks` (linting). Styling is plain CSS with custom properties, as the UI is too small to justify a component library.
+Development only: `vite` (dev server and build), `typescript`, `vitest`, `jsdom` and Testing Library (tests), `openapi-typescript` (generates API types), `eslint` with `typescript-eslint` and `eslint-plugin-react-hooks` (linting), `prettier` (formatting), and `@types/*`.
 
-## Assumptions and limitations
+Styling is plain CSS with custom properties, as the UI is too small to justify a component library.
+
+## Assumptions and known limitations
 
 - **Statuses.** The brief lists "To-do, Done, etc.", so I added `In Progress`.
-- **Required skills.** A developer must have *all* of a task's skills, not just one.
-- **Independent subtasks.** A subtask has its own skills and assignee, and doesn't inherit them from its parent.
-- **Assignment happens on the list page.** The create form doesn't offer an assignee, as the brief doesn't require one and LLM-identified skills aren't known until the task is saved.
+- **Independent subtasks.** A subtask has its own skills and assignee, and doesn't inherit them.
+- **Assignment happens on the list page.** The create form has no assignee, because LLM-identified skills aren't known until the task is saved.
 - **One top-level task per save.** This follows the wireframe, which has "Add Subtask" but no "Add Task".
-- **Every task needs at least one skill.** The LLM must choose one, so no task can be assigned without a skill check.
-- **Out of scope.** The brief doesn't call for authentication, editing or deleting tasks, adding subtasks to existing tasks, or pagination. A production version would need authentication and rate limiting, especially on `POST /tasks` because it triggers paid or quota-limited LLM calls.
+- **Skills can't be corrected by hand.** There's no API for editing a task, so a wrong LLM answer stands. A task stuck as pending can't be fixed by hand either.
+- **Progress counts direct subtasks,** matching the Done rule.
+- **Rate limits can be sidestepped on port 3000.** Compose trusts one proxy hop for nginx, and publishes the backend port for API access. Anyone calling port 3000 directly can spoof `X-Forwarded-For`. In production, don't publish that port.
+- **Out of scope.** The brief doesn't call for authentication, editing or deleting tasks, adding subtasks to existing tasks, developer or skill management, or pagination. A production version would need authentication first.
