@@ -1,17 +1,31 @@
 import { pino } from 'pino';
 import { createApp } from './app.js';
-import { loadConfig } from './config.js';
+import { ConfigError, loadConfig, type Config } from './config/env.js';
 import { runMigrations } from './db/migrate.js';
-import { createPool } from './db/pool.js';
+import { openDatabase } from './db/database.js';
+import { runSeed } from './db/seed.js';
 import { createGeminiSkillIdentifier } from './llm/geminiSkillIdentifier.js';
 import { unconfiguredSkillIdentifier } from './llm/skillIdentifier.js';
 
-const config = loadConfig();
-const logger = pino({ level: config.LOG_LEVEL });
-const db = createPool(config.DATABASE_URL);
+function readConfig(): Config {
+  try {
+    return loadConfig();
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
 
-const applied = await runMigrations(db);
-logger.info({ applied }, 'Database migrations complete');
+const config = readConfig();
+const logger = pino({ level: config.LOG_LEVEL });
+const database = await openDatabase(config.database, (message) => logger.debug(message));
+
+const applied = await runMigrations(database.pool);
+await runSeed(database.pool);
+logger.info({ applied, databaseMode: config.database.mode }, 'Database ready');
 
 if (!config.GEMINI_API_KEY) {
   logger.warn('GEMINI_API_KEY is not set: tasks created without skills will be rejected.');
@@ -24,14 +38,23 @@ const skillIdentifier = config.GEMINI_API_KEY
     })
   : unconfiguredSkillIdentifier;
 
-const server = createApp({ db, skillIdentifier, logger }).listen(config.PORT, () => {
+const server = createApp({ db: database.pool, skillIdentifier, logger }).listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'Server listening');
 });
 
+let shuttingDown = false;
 function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   logger.info({ signal }, 'Shutting down');
   server.close(() => {
-    void db.end().then(() => process.exit(0));
+    database.close().then(
+      () => process.exit(0),
+      (error: unknown) => {
+        logger.error({ err: error }, 'Database did not close cleanly');
+        process.exit(1);
+      },
+    );
   });
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));

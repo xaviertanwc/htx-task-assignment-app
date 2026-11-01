@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { Queryable } from '../db/pool.js';
+import type { Queryable } from '../db/database.js';
 import { notFound } from '../errors.js';
 import { parseIdParam } from './params.js';
 

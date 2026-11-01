@@ -2,8 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import EmbeddedPostgres from 'embedded-postgres';
 import type { TestProject } from 'vitest/node';
+import { startEmbeddedPostgres } from '../src/db/embedded.js';
 
 declare module 'vitest' {
   export interface ProvidedContext {
@@ -11,7 +11,7 @@ declare module 'vitest' {
   }
 }
 
-function findFreePort(): Promise<number> {
+export function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.once('error', reject);
@@ -22,32 +22,25 @@ function findFreePort(): Promise<number> {
   });
 }
 
-/** Uses TEST_DATABASE_URL when set (e.g. CI), otherwise boots a real, temporary Postgres. */
+/** Uses TEST_DATABASE_URL when set (e.g. a real server), otherwise boots an embedded Postgres. */
 export default async function setup(project: TestProject) {
   if (process.env.TEST_DATABASE_URL) {
     project.provide('databaseUrl', process.env.TEST_DATABASE_URL);
     return;
   }
-  const databaseDir = await mkdtemp(path.join(tmpdir(), 'task-assignment-test-'));
-  const port = await findFreePort();
-  const postgres = new EmbeddedPostgres({
-    databaseDir,
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'task-assignment-test-'));
+  const instance = await startEmbeddedPostgres({
+    dataDir,
+    port: await findFreePort(),
     user: 'postgres',
     password: 'postgres',
-    port,
+    name: 'task_assignment_test',
     persistent: false,
-    onLog: () => {},
   });
-  await postgres.initialise();
-  await postgres.start();
-  await postgres.createDatabase('task_assignment_test');
-  project.provide(
-    'databaseUrl',
-    `postgres://postgres:postgres@localhost:${port}/task_assignment_test`,
-  );
+  project.provide('databaseUrl', instance.url);
 
   return async () => {
-    await postgres.stop();
-    await rm(databaseDir, { recursive: true, force: true });
+    await instance.stop();
+    await rm(dataDir, { recursive: true, force: true });
   };
 }

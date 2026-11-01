@@ -1,14 +1,14 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Db } from './pool.js';
+import type { Pool } from './database.js';
 
 const MIGRATIONS_DIR = path.resolve(import.meta.dirname, '../../migrations');
 // Arbitrary constant: serialises migrations if several backend instances boot together.
 const MIGRATION_LOCK_ID = 727_001;
 
 /** Applies each not-yet-applied `migrations/*.sql` file in name order, one transaction per file. */
-export async function runMigrations(db: Db): Promise<string[]> {
-  const client = await db.connect();
+export async function runMigrations(pool: Pool): Promise<string[]> {
+  const client = await pool.connect();
   const applied: string[] = [];
   try {
     await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_ID]);

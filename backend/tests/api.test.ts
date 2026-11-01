@@ -3,7 +3,8 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { runMigrations } from '../src/db/migrate.js';
-import { createPool, type Db } from '../src/db/pool.js';
+import { openDatabase, type Database } from '../src/db/database.js';
+import { runSeed } from '../src/db/seed.js';
 import { SkillIdentificationError, type SkillIdentifier } from '../src/llm/skillIdentifier.js';
 
 interface Named {
@@ -19,26 +20,27 @@ const ALICE = 1; // Frontend
 const BOB = 2; // Backend
 const CAROL = 3; // Frontend, Backend
 
-let db: Db;
+let database: Database;
 let identify: SkillIdentifier['identify'];
 let app: ReturnType<typeof createApp>;
 
 beforeAll(async () => {
-  db = createPool(inject('databaseUrl'));
-  await runMigrations(db);
+  database = await openDatabase({ mode: 'external', url: inject('databaseUrl') });
+  await runMigrations(database.pool);
+  await runSeed(database.pool);
   app = createApp({
-    db,
+    db: database.pool,
     skillIdentifier: { identify: (titles, skills) => identify(titles, skills) },
     logger: pino({ level: 'silent' }),
   });
 });
 
 afterAll(async () => {
-  await db.end();
+  await database.close();
 });
 
 beforeEach(async () => {
-  await db.query('TRUNCATE tasks RESTART IDENTITY CASCADE');
+  await database.pool.query('TRUNCATE tasks RESTART IDENTITY CASCADE');
   identify = () => Promise.reject(new Error('The LLM should not have been called.'));
 });
 
@@ -51,7 +53,7 @@ const patchTask = (id: number, body: object) => request(app).patch(`/api/tasks/$
 
 describe('migrations', () => {
   it('are idempotent', async () => {
-    await expect(runMigrations(db)).resolves.toEqual([]);
+    await expect(runMigrations(database.pool)).resolves.toEqual([]);
   });
 });
 

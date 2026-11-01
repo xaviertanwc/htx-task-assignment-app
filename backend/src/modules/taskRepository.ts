@@ -1,4 +1,4 @@
-import type { Queryable } from '../db/pool.js';
+import type { Queryable } from '../db/database.js';
 import type { TaskStatus } from './taskSchemas.js';
 
 export type SkillsSource = 'user' | 'llm';

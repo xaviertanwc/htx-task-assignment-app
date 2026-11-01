@@ -17,6 +17,7 @@ services:
   backend:
     build: ./backend
     environment:
+      DB_MODE: external
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-task_assignment}
       PORT: 3000
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

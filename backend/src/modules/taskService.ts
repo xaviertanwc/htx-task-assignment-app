@@ -1,4 +1,4 @@
-import { withTransaction, type Db, type Queryable } from '../db/pool.js';
+import { withTransaction, type Pool as Db, type Queryable } from '../db/database.js';
 import { AppError, notFound } from '../errors.js';
 import { SkillIdentificationError, type SkillIdentifier } from '../llm/skillIdentifier.js';
 import { listSkills, type Skill } from './skills.js';

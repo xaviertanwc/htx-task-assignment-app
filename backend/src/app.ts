@@ -2,7 +2,7 @@ import express, { Router, type Express } from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import type { Logger } from 'pino';
-import type { Db } from './db/pool.js';
+import type { Pool as Db } from './db/database.js';
 import { AppError } from './errors.js';
 import type { SkillIdentifier } from './llm/skillIdentifier.js';
 import { errorHandler } from './middleware/errorHandler.js';
