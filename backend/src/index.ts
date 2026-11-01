@@ -4,7 +4,10 @@ import { ConfigError, loadConfig, type Config } from './config/env.js';
 import { runMigrations } from './db/migrate.js';
 import { openDatabase } from './db/database.js';
 import { runSeed } from './db/seed.js';
-import { createGeminiSkillIdentifier } from './llm/geminiSkillIdentifier.js';
+import { createSkillRepository } from './features/skills/skill.repository.js';
+import { createTaskRepository } from './features/tasks/task.repository.js';
+import { startRetryPendingSkillsJob, type RetryJob } from './jobs/retryPendingSkills.js';
+import { createGeminiSkillIdentifier } from './llm/gemini.js';
 import { unconfiguredSkillIdentifier } from './llm/skillIdentifier.js';
 
 function readConfig(): Config {
@@ -28,7 +31,7 @@ await runSeed(database.pool);
 logger.info({ applied, databaseMode: config.database.mode }, 'Database ready');
 
 if (!config.GEMINI_API_KEY) {
-  logger.warn('GEMINI_API_KEY is not set: tasks created without skills will be rejected.');
+  logger.warn('GEMINI_API_KEY is not set: tasks created without skills will stay pending.');
 }
 const skillIdentifier = config.GEMINI_API_KEY
   ? createGeminiSkillIdentifier({
@@ -45,19 +48,33 @@ const server = createApp({ pool: database.pool, skillIdentifier, logger }).liste
   },
 );
 
+const retryJob: RetryJob | undefined = config.GEMINI_API_KEY
+  ? startRetryPendingSkillsJob(
+      {
+        tasks: createTaskRepository(database.pool),
+        skills: createSkillRepository(database.pool),
+        skillIdentifier,
+        logger,
+      },
+      config.SKILL_RETRY_INTERVAL_MS,
+    )
+  : undefined;
+
 let shuttingDown = false;
 function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, 'Shutting down');
   server.close(() => {
-    database.close().then(
-      () => process.exit(0),
-      (error: unknown) => {
-        logger.error({ err: error }, 'Database did not close cleanly');
-        process.exit(1);
-      },
-    );
+    Promise.resolve(retryJob?.stop())
+      .then(() => database.close())
+      .then(
+        () => process.exit(0),
+        (error: unknown) => {
+          logger.error({ err: error }, 'Database did not close cleanly');
+          process.exit(1);
+        },
+      );
   });
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));

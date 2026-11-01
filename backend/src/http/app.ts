@@ -29,7 +29,7 @@ export function createApp({ pool, skillIdentifier, logger }: AppDependencies): E
 
   const app = express();
   app.use(helmet());
-  app.use(pinoHttp({ logger }));
+  app.use(pinoHttp({ logger, redact: ['req.headers.authorization', 'req.headers.cookie'] }));
   app.use(express.json({ limit: '100kb' }));
 
   app.get('/health', async (req, res) => {
@@ -43,7 +43,10 @@ export function createApp({ pool, skillIdentifier, logger }: AppDependencies): E
   });
 
   const api = Router();
-  api.use('/tasks', taskRoutes(createTaskService({ tasks, skills, developers, skillIdentifier })));
+  api.use(
+    '/tasks',
+    taskRoutes(createTaskService({ tasks, skills, developers, skillIdentifier, logger })),
+  );
   api.use('/developers', developerRoutes(createDeveloperService(developers)));
   api.use('/skills', skillRoutes(createSkillService(skills)));
   app.use('/api/v1', api);

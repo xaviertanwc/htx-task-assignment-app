@@ -1,4 +1,5 @@
 import { AppError } from '../../shared/errors.js';
+import type { SkillsSource } from './task.repository.js';
 import type { TaskStatus } from './task.schemas.js';
 
 interface NamedSkill {
@@ -19,6 +20,17 @@ export function assertDeveloperQualified(required: NamedSkill[], held: NamedSkil
       'DEVELOPER_MISSING_SKILLS',
       `This developer lacks skills required by the task: ${missing.join(', ')}.`,
       { missingSkills: missing },
+    );
+  }
+}
+
+/** Until its skills are known, nobody can be shown to meet a task's requirements. */
+export function assertSkillsKnown(skillsSource: SkillsSource): void {
+  if (skillsSource === 'pending') {
+    throw new AppError(
+      'conflict',
+      'TASK_SKILLS_PENDING',
+      'This task cannot be assigned until its skills have been identified.',
     );
   }
 }

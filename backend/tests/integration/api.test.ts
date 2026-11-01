@@ -5,7 +5,14 @@ import { createApp } from '../../src/http/app.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { openDatabase, type Database } from '../../src/db/database.js';
 import { runSeed } from '../../src/db/seed.js';
-import { SkillIdentificationError, type SkillIdentifier } from '../../src/llm/skillIdentifier.js';
+import { createSkillRepository } from '../../src/features/skills/skill.repository.js';
+import { createTaskRepository } from '../../src/features/tasks/task.repository.js';
+import { retryPendingSkillsOnce } from '../../src/jobs/retryPendingSkills.js';
+import {
+  SkillIdentificationError,
+  type SkillIdentifier,
+  type SkillOption,
+} from '../../src/llm/skillIdentifier.js';
 
 interface Named {
   name: string;
@@ -42,6 +49,15 @@ afterAll(async () => {
 beforeEach(async () => {
   await database.pool.query('TRUNCATE tasks RESTART IDENTITY CASCADE');
   identify = () => Promise.reject(new Error('The LLM should not have been called.'));
+});
+
+const retryDependencies = () => ({
+  tasks: createTaskRepository(database.pool),
+  skills: createSkillRepository(database.pool),
+  skillIdentifier: {
+    identify: (titles: string[], skills: SkillOption[]) => identify(titles, skills),
+  },
+  logger: pino({ level: 'silent' }),
 });
 
 const createTask = async (body: object) => {
@@ -217,14 +233,46 @@ describe('identifying skills with the LLM', () => {
     await createTask({ title: 'x', skillIds: [FRONTEND] });
   });
 
-  it('saves nothing and returns 503 when identification fails', async () => {
+  it('still creates the task when identification fails, and blocks assigning it', async () => {
     identify = () => Promise.reject(new SkillIdentificationError('down'));
-    const res = await request(app)
-      .post('/api/v1/tasks')
-      .send({ title: 'x', skillIds: [FRONTEND], subtasks: [{ title: 'y' }] });
+    const root = await createTask({
+      title: 'Pending',
+      subtasks: [{ title: 'Chosen', skillIds: [FRONTEND] }],
+    });
+    expect(root).toMatchObject({ skillsSource: 'pending', skills: [] });
+    expect(root.subtasks[0]).toMatchObject({
+      skillsSource: 'user',
+      skills: [{ name: 'Frontend' }],
+    });
+
+    const res = await patchTask(root.id, { assigneeId: CAROL });
     expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('SKILL_IDENTIFICATION_FAILED');
-    expect((await request(app).get('/api/v1/tasks')).body.data).toEqual([]);
+    expect(res.body.error.code).toBe('TASK_SKILLS_PENDING');
+
+    // Only assigning is blocked: the subtask and the task's status are unaffected.
+    await patchTask(root.subtasks[0].id, { assigneeId: ALICE }).expect(200);
+    await patchTask(root.id, { status: 'In Progress' }).expect(200);
+  });
+
+  it('keeps only the unresolved titles pending', async () => {
+    identify = async () => [['Backend'], []];
+    const root = await createTask({ title: 'Clear', subtasks: [{ title: 'Unclear' }] });
+    expect(root).toMatchObject({ skillsSource: 'llm', skills: [{ name: 'Backend' }] });
+    expect(root.subtasks[0]).toMatchObject({ skillsSource: 'pending', skills: [] });
+  });
+
+  it('lets the retry job resolve pending tasks, which can then be assigned', async () => {
+    identify = () => Promise.reject(new SkillIdentificationError('down'));
+    const task = await createTask({ title: 'Pending' });
+
+    identify = async () => [['Frontend']];
+    await expect(retryPendingSkillsOnce(retryDependencies())).resolves.toBe(1);
+    await expect(retryPendingSkillsOnce(retryDependencies())).resolves.toBe(0);
+
+    const read = await request(app).get(`/api/v1/tasks/${task.id}`);
+    expect(read.body.data).toMatchObject({ skillsSource: 'llm', skills: [{ name: 'Frontend' }] });
+    expect((await patchTask(task.id, { assigneeId: BOB })).status).toBe(422);
+    await patchTask(task.id, { assigneeId: ALICE }).expect(200);
   });
 });
 

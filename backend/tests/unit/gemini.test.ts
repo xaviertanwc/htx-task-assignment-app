@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createGeminiSkillIdentifier, parseAnswer } from '../../src/llm/geminiSkillIdentifier.js';
+import { createGeminiSkillIdentifier } from '../../src/llm/gemini.js';
 import { SkillIdentificationError } from '../../src/llm/skillIdentifier.js';
 
 const SKILLS = ['Frontend', 'Backend'];
@@ -11,29 +11,6 @@ interface GeminiRequest {
   contents: { parts: { text: string }[] }[];
   generationConfig: { responseMimeType: string; responseSchema: unknown };
 }
-
-describe('parseAnswer', () => {
-  it('orders answers by index and drops skills outside the catalogue', () => {
-    const text = JSON.stringify([
-      { index: 1, skills: ['Backend', 'Backend', 'Cooking'] },
-      { index: 0, skills: ['Frontend'] },
-    ]);
-    expect(parseAnswer(text, 2, SKILLS)).toEqual([['Frontend'], ['Backend']]);
-  });
-
-  it.each([
-    ['not JSON', 'nope'],
-    ['missing text', undefined],
-    ['the wrong shape', '{"skills": []}'],
-    ['a title with no answer', '[{"index": 0, "skills": ["Frontend"]}]'],
-    [
-      'only unknown skills',
-      '[{"index": 0, "skills": ["Cooking"]}, {"index": 1, "skills": ["Backend"]}]',
-    ],
-  ])('rejects %s', (_name, text) => {
-    expect(() => parseAnswer(text, 2, SKILLS)).toThrow();
-  });
-});
 
 describe('createGeminiSkillIdentifier', () => {
   let server: Server;
@@ -85,6 +62,7 @@ describe('createGeminiSkillIdentifier', () => {
     expect(body.contents[0]!.parts[0]!.text).toContain('Upload a picture');
     expect(body.generationConfig.responseMimeType).toBe('application/json');
     expect(JSON.stringify(body.generationConfig.responseSchema)).toContain('Frontend');
+    expect(body.contents[0]!.parts[0]!.text).toContain('Frontend work');
   });
 
   it('retries after a transient failure and an invalid answer', async () => {
@@ -95,6 +73,30 @@ describe('createGeminiSkillIdentifier', () => {
     ];
     await expect(identifier().identify(['Audit logs'], OPTIONS)).resolves.toEqual([['Backend']]);
     expect(requests).toHaveLength(3);
+  });
+
+  it('retries a partial answer, then returns it, leaving unresolved titles empty', async () => {
+    const partial = modelReply('[{"index": 0, "skills": ["Backend"]}, {"index": 1, "skills": []}]');
+    responses = [partial, partial, partial];
+    await expect(identifier().identify(['Clear', 'Unclear'], OPTIONS)).resolves.toEqual([
+      ['Backend'],
+      [],
+    ]);
+    expect(requests).toHaveLength(3);
+  });
+
+  it('does not include the API key in errors', async () => {
+    const rejected = createGeminiSkillIdentifier({
+      apiKey: 'secret-key-value',
+      model: 'test-model',
+      baseUrl,
+      backoffMs: 1,
+    }).identify(['Audit logs'], OPTIONS);
+    const error = await rejected.then(
+      () => undefined,
+      (caught: Error) => caught,
+    );
+    expect(`${error?.message} ${String(error?.cause)}`).not.toContain('secret-key-value');
   });
 
   it('gives up with SkillIdentificationError after three attempts', async () => {

@@ -1,7 +1,7 @@
 import { withTransaction, type Pool, type Queryable } from '../../db/database.js';
 import type { TaskStatus } from './task.schemas.js';
 
-export type SkillsSource = 'user' | 'llm';
+export type SkillsSource = 'user' | 'llm' | 'pending';
 
 export interface Task {
   id: number;
@@ -25,6 +25,7 @@ export interface NewTask {
 
 export interface LockedTask {
   status: TaskStatus;
+  skillsSource: SkillsSource;
   parentStatus: TaskStatus | null;
   skills: { id: number; name: string }[];
 }
@@ -43,6 +44,9 @@ export interface TaskRepository {
   findAll(): Promise<Task[]>;
   findTree(id: number): Promise<Task | undefined>;
   transaction<T>(work: (tx: TaskTransaction) => Promise<T>): Promise<T>;
+  findPendingSkills(limit: number): Promise<{ id: number; title: string }[]>;
+  /** Records identified skills. Returns false if the task was no longer pending. */
+  resolvePendingSkills(id: number, skillIds: number[]): Promise<boolean>;
 }
 
 interface TaskRow {
@@ -136,11 +140,17 @@ function createTaskTransaction(db: Queryable): TaskTransaction {
         );
         parentStatus = rows[0]!.status;
       }
-      const { rows } = await db.query<Pick<LockedTask, 'status' | 'skills'>>(
-        `SELECT t.status, ${SKILLS_OF_TASK} AS skills FROM tasks t WHERE t.id = $1 FOR UPDATE OF t`,
+      const { rows } = await db.query<{
+        status: TaskStatus;
+        skills_source: SkillsSource;
+        skills: LockedTask['skills'];
+      }>(
+        `SELECT t.status, t.skills_source, ${SKILLS_OF_TASK} AS skills
+         FROM tasks t WHERE t.id = $1 FOR UPDATE OF t`,
         [id],
       );
-      return { ...rows[0]!, parentStatus };
+      const { status, skills_source: skillsSource, skills } = rows[0]!;
+      return { status, skillsSource, skills, parentStatus };
     },
 
     async findUnfinishedSubtasks(parentId) {
@@ -197,5 +207,28 @@ export function createTaskRepository(pool: Pool): TaskRepository {
     },
 
     transaction: (work) => withTransaction(pool, (client) => work(createTaskTransaction(client))),
+
+    async findPendingSkills(limit) {
+      const { rows } = await pool.query<{ id: number; title: string }>(
+        `SELECT id, title FROM tasks WHERE skills_source = 'pending' ORDER BY id LIMIT $1`,
+        [limit],
+      );
+      return rows;
+    },
+
+    resolvePendingSkills: (id, skillIds) =>
+      withTransaction(pool, async (client) => {
+        const { rowCount } = await client.query(
+          `UPDATE tasks SET skills_source = 'llm', updated_at = now()
+           WHERE id = $1 AND skills_source = 'pending'`,
+          [id],
+        );
+        if (rowCount === 0) return false;
+        await client.query(
+          `INSERT INTO task_skills (task_id, skill_id) SELECT $1, unnest($2::int[])`,
+          [id, skillIds],
+        );
+        return true;
+      }),
   };
 }

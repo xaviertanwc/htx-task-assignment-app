@@ -1,9 +1,15 @@
 import { AppError, notFound } from '../../shared/errors.js';
-import { SkillIdentificationError, type SkillIdentifier } from '../../llm/skillIdentifier.js';
+import type { SkillIdentifier } from '../../llm/skillIdentifier.js';
 import type { DeveloperRepository } from '../developers/developer.repository.js';
 import type { Skill, SkillRepository } from '../skills/skill.repository.js';
+import { resolveSkillIds, type WarningLogger } from './skill.resolution.js';
 import type { Task, TaskRepository, TaskTransaction } from './task.repository.js';
-import { assertCanLeaveDone, assertCanMarkDone, assertDeveloperQualified } from './task.rules.js';
+import {
+  assertCanLeaveDone,
+  assertCanMarkDone,
+  assertDeveloperQualified,
+  assertSkillsKnown,
+} from './task.rules.js';
 import type { TaskInput, TaskUpdate } from './task.schemas.js';
 
 export interface TaskService {
@@ -18,6 +24,7 @@ export interface TaskServiceDependencies {
   skills: SkillRepository;
   developers: DeveloperRepository;
   skillIdentifier: SkillIdentifier;
+  logger: WarningLogger;
 }
 
 function flatten(node: TaskInput): TaskInput[] {
@@ -46,6 +53,7 @@ export function createTaskService({
   skills,
   developers,
   skillIdentifier,
+  logger,
 }: TaskServiceDependencies): TaskService {
   /** Resolves LLM skills for every node that has none, keyed by node. One call for the whole tree. */
   async function identifyMissingSkills(
@@ -55,25 +63,13 @@ export function createTaskService({
     const unspecified = nodes.filter((node) => node.skillIds.length === 0);
     if (unspecified.length === 0) return new Map();
 
-    let answers: string[][];
-    try {
-      answers = await skillIdentifier.identify(
-        unspecified.map((node) => node.title),
-        catalogue,
-      );
-    } catch (error) {
-      if (!(error instanceof SkillIdentificationError)) throw error;
-      throw new AppError(
-        'conflict',
-        'SKILL_IDENTIFICATION_FAILED',
-        'Skills could not be identified automatically right now. Nothing was saved. Try again, or select the skills yourself.',
-      );
-    }
-
-    const idByName = new Map(catalogue.map((skill) => [skill.name, skill.id]));
-    return new Map(
-      unspecified.map((node, index) => [node, answers[index]!.map((name) => idByName.get(name)!)]),
+    const skillIds = await resolveSkillIds(
+      skillIdentifier,
+      unspecified.map((node) => node.title),
+      catalogue,
+      logger,
     );
+    return new Map(unspecified.map((node, index) => [node, skillIds[index]!]));
   }
 
   async function insertTree(
@@ -87,7 +83,7 @@ export function createTaskService({
       title: node.title,
       parentTaskId,
       skillIds: llmSkillIds ?? [...new Set(node.skillIds)],
-      skillsSource: llmSkillIds ? 'llm' : 'user',
+      skillsSource: !llmSkillIds ? 'user' : llmSkillIds.length > 0 ? 'llm' : 'pending',
     });
     for (const subtask of node.subtasks) {
       await insertTree(tx, subtask, id, identified);
@@ -126,6 +122,7 @@ export function createTaskService({
           assertCanLeaveDone(current.parentStatus);
         }
         if (update.assigneeId !== undefined && update.assigneeId !== null) {
+          assertSkillsKnown(current.skillsSource);
           const developer = await developers.findById(update.assigneeId);
           if (!developer) {
             throw new AppError(
