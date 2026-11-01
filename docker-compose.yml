@@ -1,37 +1,44 @@
 services:
-  db:
-    image: postgres:18-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-task_assignment}
-    volumes:
-      # Postgres 18+ images keep data in a versioned directory under this path.
-      - db-data:/var/lib/postgresql
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
   backend:
     build: ./backend
+    # Runs a small init as PID 1, because embedded mode starts Postgres as a child process.
+    init: true
     environment:
-      DB_MODE: external
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-task_assignment}
+      DB_MODE: ${DB_MODE:-embedded}
+      DATABASE_URL: ${DATABASE_URL:-}
       PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-}
-    depends_on:
-      db:
-        condition: service_healthy
+      SKILL_RETRY_INTERVAL_MS: ${SKILL_RETRY_INTERVAL_MS:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-}
+      # Requests arrive through nginx, so the client's address is one proxy hop away.
+      TRUST_PROXY_HOPS: 1
+    volumes:
+      - embedded-data:/app/data
     ports:
       - '${BACKEND_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+        # Only exists under the "external" profile.
+        required: false
     healthcheck:
-      test: ['CMD', 'node', '-e', "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 10
+      # First boot initialises the embedded database.
+      start_period: 60s
+    stop_grace_period: 30s
 
   frontend:
     build: ./frontend
@@ -39,7 +46,30 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - '${FRONTEND_PORT:-8080}:80'
+      - '${FRONTEND_PORT:-8080}:8080'
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--spider', 'http://localhost:8080/']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Optional real server. See "Using an external PostgreSQL server" in the README.
+  postgres:
+    profiles: [external]
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-task_assignment}
+    volumes:
+      # Postgres 18+ images keep data in a versioned directory under this path.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
-  db-data:
+  embedded-data:
+  postgres-data:
