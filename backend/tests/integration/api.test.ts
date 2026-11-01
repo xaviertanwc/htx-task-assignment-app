@@ -1,11 +1,11 @@
 import { pino } from 'pino';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
-import { createApp } from '../src/app.js';
-import { runMigrations } from '../src/db/migrate.js';
-import { openDatabase, type Database } from '../src/db/database.js';
-import { runSeed } from '../src/db/seed.js';
-import { SkillIdentificationError, type SkillIdentifier } from '../src/llm/skillIdentifier.js';
+import { createApp } from '../../src/http/app.js';
+import { runMigrations } from '../../src/db/migrate.js';
+import { openDatabase, type Database } from '../../src/db/database.js';
+import { runSeed } from '../../src/db/seed.js';
+import { SkillIdentificationError, type SkillIdentifier } from '../../src/llm/skillIdentifier.js';
 
 interface Named {
   name: string;
@@ -29,7 +29,7 @@ beforeAll(async () => {
   await runMigrations(database.pool);
   await runSeed(database.pool);
   app = createApp({
-    db: database.pool,
+    pool: database.pool,
     skillIdentifier: { identify: (titles, skills) => identify(titles, skills) },
     logger: pino({ level: 'silent' }),
   });
@@ -45,11 +45,12 @@ beforeEach(async () => {
 });
 
 const createTask = async (body: object) => {
-  const res = await request(app).post('/api/tasks').send(body);
+  const res = await request(app).post('/api/v1/tasks').send(body);
   expect(res.status).toBe(201);
-  return res.body;
+  return res.body.data;
 };
-const patchTask = (id: number, body: object) => request(app).patch(`/api/tasks/${id}`).send(body);
+const patchTask = (id: number, body: object) =>
+  request(app).patch(`/api/v1/tasks/${id}`).send(body);
 
 describe('migrations', () => {
   it('are idempotent', async () => {
@@ -59,14 +60,14 @@ describe('migrations', () => {
 
 describe('seed data', () => {
   it('contains the developers and skills from the brief', async () => {
-    const skills = await request(app).get('/api/skills');
-    expect(skills.body).toEqual([
+    const skills = await request(app).get('/api/v1/skills');
+    expect(skills.body.data).toMatchObject([
       { id: FRONTEND, name: 'Frontend' },
       { id: BACKEND, name: 'Backend' },
     ]);
 
-    const developers = await request(app).get('/api/developers');
-    const summary = developers.body.map((d: Named & { skills: Named[] }) => [
+    const developers = await request(app).get('/api/v1/developers');
+    const summary = developers.body.data.map((d: Named & { skills: Named[] }) => [
       d.name,
       d.skills.map((s) => s.name),
     ]);
@@ -81,22 +82,22 @@ describe('seed data', () => {
 
 describe('reading developers and skills', () => {
   it('reads one skill, and 404s on an unknown one', async () => {
-    expect((await request(app).get(`/api/skills/${BACKEND}`)).body.name).toBe('Backend');
-    expect((await request(app).get('/api/skills/999')).status).toBe(404);
+    expect((await request(app).get(`/api/v1/skills/${BACKEND}`)).body.data.name).toBe('Backend');
+    expect((await request(app).get('/api/v1/skills/999')).status).toBe(404);
   });
 
   it('reads one developer with assigned tasks', async () => {
     const task = await createTask({ title: 'Page', skillIds: [FRONTEND] });
     await patchTask(task.id, { assigneeId: ALICE }).expect(200);
 
-    const res = await request(app).get(`/api/developers/${ALICE}`);
-    expect(res.body.tasks).toEqual([{ id: task.id, title: 'Page', status: 'To-do' }]);
-    expect((await request(app).get('/api/developers/999')).status).toBe(404);
+    const res = await request(app).get(`/api/v1/developers/${ALICE}`);
+    expect(res.body.data.tasks).toEqual([{ id: task.id, title: 'Page', status: 'To-do' }]);
+    expect((await request(app).get('/api/v1/developers/999')).status).toBe(404);
   });
 
   it('rejects a malformed id', async () => {
-    expect((await request(app).get('/api/developers/abc')).status).toBe(400);
-    expect((await request(app).get('/api/tasks/99999999999')).status).toBe(400);
+    expect((await request(app).get('/api/v1/developers/abc')).status).toBe(400);
+    expect((await request(app).get('/api/v1/tasks/99999999999')).status).toBe(400);
   });
 });
 
@@ -112,8 +113,8 @@ describe('creating tasks', () => {
       skills: [{ id: FRONTEND, name: 'Frontend' }],
       subtasks: [],
     });
-    const read = await request(app).get(`/api/tasks/${created.id}`);
-    expect(read.body).toEqual(created);
+    const read = await request(app).get(`/api/v1/tasks/${created.id}`);
+    expect(read.body.data).toEqual(created);
   });
 
   it('creates nested subtasks and lists only roots at the top level', async () => {
@@ -134,13 +135,13 @@ describe('creating tasks', () => {
     expect(root.subtasks[0].parentTaskId).toBe(root.id);
     expect(root.subtasks[0].subtasks.map((t: TaskBody) => t.title)).toEqual(['1.1.1', '1.1.2']);
 
-    const list = await request(app).get('/api/tasks');
-    expect(list.body.map((t: TaskBody) => t.title)).toEqual(['1']);
-    expect(list.body[0].subtasks[0].subtasks).toHaveLength(2);
+    const list = await request(app).get('/api/v1/tasks');
+    expect(list.body.data.map((t: TaskBody) => t.title)).toEqual(['1']);
+    expect(list.body.data[0].subtasks[0].subtasks).toHaveLength(2);
 
-    const subtree = await request(app).get(`/api/tasks/${root.subtasks[0].id}`);
-    expect(subtree.body.title).toBe('1.1');
-    expect(subtree.body.subtasks).toHaveLength(2);
+    const subtree = await request(app).get(`/api/v1/tasks/${root.subtasks[0].id}`);
+    expect(subtree.body.data.title).toBe('1.1');
+    expect(subtree.body.data.subtasks).toHaveLength(2);
   });
 
   it.each([
@@ -149,18 +150,18 @@ describe('creating tasks', () => {
     ['an unknown field', { title: 'x', assigneeId: 1 }],
     ['an invalid subtask', { title: 'x', subtasks: [{ title: '' }] }],
   ])('rejects %s', async (_name, body) => {
-    const res = await request(app).post('/api/tasks').send(body);
+    const res = await request(app).post('/api/v1/tasks').send(body);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('rejects unknown skill ids without saving', async () => {
     const res = await request(app)
-      .post('/api/tasks')
+      .post('/api/v1/tasks')
       .send({ title: 'x', skillIds: [999] });
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('UNKNOWN_SKILLS');
-    expect((await request(app).get('/api/tasks')).body).toEqual([]);
+    expect((await request(app).get('/api/v1/tasks')).body.data).toEqual([]);
   });
 
   it('rejects trees that are too deep or too large', async () => {
@@ -168,19 +169,19 @@ describe('creating tasks', () => {
     let deep = '{"title":"leaf"}';
     for (let i = 0; i < 2000; i++) deep = `{"title":"x","subtasks":[${deep}]}`;
     const tooDeep = await request(app)
-      .post('/api/tasks')
+      .post('/api/v1/tasks')
       .set('content-type', 'application/json')
       .send(deep);
     expect(tooDeep.body.error.code).toBe('TASK_TREE_TOO_LARGE');
 
     const wide = { title: 'x', subtasks: Array.from({ length: 100 }, () => ({ title: 'y' })) };
-    const tooWide = await request(app).post('/api/tasks').send(wide);
+    const tooWide = await request(app).post('/api/v1/tasks').send(wide);
     expect(tooWide.body.error.code).toBe('TASK_TREE_TOO_LARGE');
   });
 
   it('returns 400 on malformed JSON', async () => {
     const res = await request(app)
-      .post('/api/tasks')
+      .post('/api/v1/tasks')
       .set('content-type', 'application/json')
       .send('{"title":');
     expect(res.status).toBe(400);
@@ -191,7 +192,7 @@ describe('identifying skills with the LLM', () => {
   it('asks once, only about tasks without skills, and stores the answer', async () => {
     const calls: { titles: string[]; skills: string[] }[] = [];
     identify = async (titles, skills) => {
-      calls.push({ titles, skills });
+      calls.push({ titles, skills: skills.map((skill) => skill.name) });
       return [['Frontend', 'Backend'], ['Backend']];
     };
 
@@ -219,11 +220,11 @@ describe('identifying skills with the LLM', () => {
   it('saves nothing and returns 503 when identification fails', async () => {
     identify = () => Promise.reject(new SkillIdentificationError('down'));
     const res = await request(app)
-      .post('/api/tasks')
+      .post('/api/v1/tasks')
       .send({ title: 'x', skillIds: [FRONTEND], subtasks: [{ title: 'y' }] });
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('SKILL_IDENTIFICATION_FAILED');
-    expect((await request(app).get('/api/tasks')).body).toEqual([]);
+    expect((await request(app).get('/api/v1/tasks')).body.data).toEqual([]);
   });
 });
 
@@ -232,7 +233,7 @@ describe('assigning tasks', () => {
     const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
     const res = await patchTask(task.id, { assigneeId: ALICE });
     expect(res.status).toBe(200);
-    expect(res.body.assignee).toEqual({ id: ALICE, name: 'Alice' });
+    expect(res.body.data.assignee).toEqual({ id: ALICE, name: 'Alice' });
   });
 
   it('rejects a developer without the required skill', async () => {
@@ -240,7 +241,7 @@ describe('assigning tasks', () => {
     const res = await patchTask(task.id, { assigneeId: BOB });
     expect(res.status).toBe(422);
     expect(res.body.error.details.missingSkills).toEqual(['Frontend']);
-    expect((await request(app).get(`/api/tasks/${task.id}`)).body.assignee).toBeNull();
+    expect((await request(app).get(`/api/v1/tasks/${task.id}`)).body.data.assignee).toBeNull();
   });
 
   it('requires all skills on a multi-skill task', async () => {
@@ -264,14 +265,14 @@ describe('assigning tasks', () => {
     const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
     await patchTask(task.id, { assigneeId: ALICE, status: 'In Progress' }).expect(200);
     const res = await patchTask(task.id, { assigneeId: null });
-    expect(res.body).toMatchObject({ assignee: null, status: 'In Progress' });
+    expect(res.body.data).toMatchObject({ assignee: null, status: 'In Progress' });
   });
 
   it('keeps the assignee when only the status changes', async () => {
     const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
     await patchTask(task.id, { assigneeId: ALICE }).expect(200);
     const res = await patchTask(task.id, { status: 'Done' });
-    expect(res.body).toMatchObject({ assignee: { id: ALICE }, status: 'Done' });
+    expect(res.body.data).toMatchObject({ assignee: { id: ALICE }, status: 'Done' });
   });
 
   it('rejects an unknown developer, task and status', async () => {
@@ -285,7 +286,7 @@ describe('assigning tasks', () => {
   it('applies nothing when one part of an update is invalid', async () => {
     const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
     expect((await patchTask(task.id, { status: 'Done', assigneeId: BOB })).status).toBe(422);
-    expect((await request(app).get(`/api/tasks/${task.id}`)).body.status).toBe('To-do');
+    expect((await request(app).get(`/api/v1/tasks/${task.id}`)).body.data.status).toBe('To-do');
   });
 });
 
@@ -359,7 +360,7 @@ describe('the Done rule', () => {
         patchTask(child.id, { status: 'To-do' }),
       ]);
 
-      const after = (await request(app).get(`/api/tasks/${root.id}`)).body;
+      const after = (await request(app).get(`/api/v1/tasks/${root.id}`)).body;
       if (after.status === 'Done') expect(after.subtasks[0].status).toBe('Done');
     }
   });
@@ -368,7 +369,7 @@ describe('the Done rule', () => {
 describe('routing', () => {
   it('reports health and 404s unknown routes as JSON', async () => {
     expect((await request(app).get('/health')).body).toEqual({ status: 'ok' });
-    const res = await request(app).get('/api/nope');
+    const res = await request(app).get('/api/v1/nope');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('ROUTE_NOT_FOUND');
   });

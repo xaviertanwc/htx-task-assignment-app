@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { AppError } from '../errors.js';
-import { idSchema } from './params.js';
+import { AppError } from '../../shared/errors.js';
+import { idSchema } from '../../shared/params.js';
 
 export const TASK_STATUSES = ['To-do', 'In Progress', 'Done'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -30,7 +30,7 @@ function assertTreeWithinLimits(body: unknown): void {
     count++;
     if (count > MAX_TASKS_PER_REQUEST || depth > MAX_NESTING_DEPTH) {
       throw new AppError(
-        400,
+        'invalid',
         'TASK_TREE_TOO_LARGE',
         `A request can hold at most ${MAX_TASKS_PER_REQUEST} tasks nested ${MAX_NESTING_DEPTH} levels deep.`,
       );

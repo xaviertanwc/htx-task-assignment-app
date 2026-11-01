@@ -1,13 +1,16 @@
-import { Router } from 'express';
-import type { Queryable } from '../db/database.js';
-import { notFound } from '../errors.js';
-import { parseIdParam } from './params.js';
+import type { Queryable } from '../../db/database.js';
+import type { TaskStatus } from '../tasks/task.schemas.js';
 
 export interface Developer {
   id: number;
   name: string;
   skills: { id: number; name: string }[];
-  tasks: { id: number; title: string; status: string }[];
+  tasks: { id: number; title: string; status: TaskStatus }[];
+}
+
+export interface DeveloperRepository {
+  findAll(): Promise<Developer[]>;
+  findById(id: number): Promise<Developer | undefined>;
 }
 
 const SELECT_DEVELOPERS = `
@@ -27,16 +30,15 @@ const SELECT_DEVELOPERS = `
   FROM developers d
 `;
 
-export function developersRouter(db: Queryable): Router {
-  return Router()
-    .get('/', async (_req, res) => {
+export function createDeveloperRepository(db: Queryable): DeveloperRepository {
+  return {
+    async findAll() {
       const { rows } = await db.query<Developer>(`${SELECT_DEVELOPERS} ORDER BY d.id`);
-      res.json(rows);
-    })
-    .get('/:id', async (req, res) => {
-      const id = parseIdParam(req.params.id);
+      return rows;
+    },
+    async findById(id) {
       const { rows } = await db.query<Developer>(`${SELECT_DEVELOPERS} WHERE d.id = $1`, [id]);
-      if (!rows[0]) throw notFound('Developer', id);
-      res.json(rows[0]);
-    });
+      return rows[0];
+    },
+  };
 }

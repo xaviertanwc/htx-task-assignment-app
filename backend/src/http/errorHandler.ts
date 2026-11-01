@@ -1,6 +1,13 @@
 import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
-import { AppError } from '../errors.js';
+import { AppError, type ErrorKind } from '../shared/errors.js';
+
+const STATUS_BY_KIND: Record<ErrorKind, number> = {
+  invalid: 400,
+  not_found: 404,
+  conflict: 409,
+  unprocessable: 422,
+};
 
 export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
   if (res.headersSent) {
@@ -8,8 +15,7 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
     return;
   }
   if (error instanceof AppError) {
-    if (error.status >= 500) req.log?.error({ err: error }, error.message);
-    res.status(error.status).json({
+    res.status(STATUS_BY_KIND[error.kind]).json({
       error: { code: error.code, message: error.message, details: error.details },
     });
     return;

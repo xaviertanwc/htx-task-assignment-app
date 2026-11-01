@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigError, loadConfig } from '../src/config/env.js';
+import { ConfigError, loadConfig } from '../../src/config/env.js';
 
 function problemsFor(env: NodeJS.ProcessEnv): string[] {
   try {

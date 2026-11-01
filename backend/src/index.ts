@@ -1,5 +1,5 @@
 import { pino } from 'pino';
-import { createApp } from './app.js';
+import { createApp } from './http/app.js';
 import { ConfigError, loadConfig, type Config } from './config/env.js';
 import { runMigrations } from './db/migrate.js';
 import { openDatabase } from './db/database.js';
@@ -38,9 +38,12 @@ const skillIdentifier = config.GEMINI_API_KEY
     })
   : unconfiguredSkillIdentifier;
 
-const server = createApp({ db: database.pool, skillIdentifier, logger }).listen(config.PORT, () => {
-  logger.info({ port: config.PORT }, 'Server listening');
-});
+const server = createApp({ pool: database.pool, skillIdentifier, logger }).listen(
+  config.PORT,
+  () => {
+    logger.info({ port: config.PORT }, 'Server listening');
+  },
+);
 
 let shuttingDown = false;
 function shutdown(signal: string) {

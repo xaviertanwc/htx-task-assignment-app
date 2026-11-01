@@ -52,7 +52,8 @@ export function createGeminiSkillIdentifier(options: GeminiOptions): SkillIdenti
   });
 
   return {
-    async identify(titles, availableSkills) {
+    async identify(titles, skills) {
+      const availableSkills = skills.map((skill) => skill.name);
       const contents = JSON.stringify({
         allowedSkills: availableSkills,
         tasks: titles.map((title, index) => ({ index, title })),

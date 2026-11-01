@@ -2,10 +2,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, inject, it } from 'vitest';
-import { openDatabase } from '../src/db/database.js';
-import { runMigrations } from '../src/db/migrate.js';
-import { runSeed } from '../src/db/seed.js';
-import { findFreePort } from './globalSetup.js';
+import { openDatabase } from '../../src/db/database.js';
+import { runMigrations } from '../../src/db/migrate.js';
+import { runSeed } from '../../src/db/seed.js';
+import { findFreePort } from '../globalSetup.js';
 
 const SEEDED = `
   SELECT d.name, array_agg(s.name ORDER BY s.id) AS skills
