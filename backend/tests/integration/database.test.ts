@@ -52,6 +52,12 @@ describe('openDatabase', () => {
         { name: 'Carol', skills: ['Frontend', 'Backend'] },
         { name: 'Dave', skills: ['Backend'] },
       ]);
+
+      // Only one process can use a data directory, and the failure must explain itself.
+      await expect(openDatabase({ ...config, port: await findFreePort() })).rejects.toThrow(
+        /no other process is using/,
+      );
+      await expect(second.pool.query('SELECT 1')).resolves.toBeDefined();
       await second.close();
     } finally {
       await rm(dataDir, { recursive: true, force: true });

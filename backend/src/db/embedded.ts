@@ -34,7 +34,15 @@ export async function startEmbeddedPostgres(options: EmbeddedOptions): Promise<E
   });
 
   if (!existsSync(path.join(databaseDir, 'PG_VERSION'))) await postgres.initialise();
-  await postgres.start();
+  try {
+    await postgres.start();
+  } catch (cause) {
+    // The library rejects with no value, and a held data directory is by far the likeliest reason.
+    throw new Error(
+      `Embedded PostgreSQL could not start. Check that no other process is using ${databaseDir}.`,
+      { cause },
+    );
+  }
 
   const admin = postgres.getPgClient();
   await admin.connect();
