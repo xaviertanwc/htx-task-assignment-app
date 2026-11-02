@@ -162,7 +162,7 @@ Constraints that are true of any row live in the database: required columns, val
 
 - skill matching on assignment
 - the Done rule
-- the assignee rule for leaving To-do
+- the assignee rule for moving forward
 
 **Alternative considered: database triggers.** They would also catch writes that bypass the API. However, they would split business logic across SQL and TypeScript, make the rules harder to read and test, and produce generic database errors instead of specific codes like `SUBTASKS_NOT_DONE`. With the API as the only writer, the service layer is the clearer place, and row locks (see [section 4.2](#42-concurrency-row-locks-taken-parent-first)) close the race windows a trigger would otherwise cover.
 
@@ -185,7 +185,7 @@ Keeping them apart means reference data never gets tangled with schema history. 
 | ---- | ----- | ----- |
 | A developer must have **every** skill a task requires | 422 `DEVELOPER_MISSING_SKILLS` | The brief's "with the Skill(s) required" is read as all, not any |
 | A task with **pending** skills can't be assigned | 409 `TASK_SKILLS_PENDING` | Nobody can be shown to qualify for unknown requirements |
-| An **unassigned** task can't leave `To-do` | 409 `TASK_UNASSIGNED` | Judged on the assignee *after* the update |
+| An **unassigned** task can move backwards but not forwards | 409 `TASK_UNASSIGNED` | Judged on the assignee *after* the update |
 | A task can be `Done` only when **all direct subtasks** are `Done` | 409 `SUBTASKS_NOT_DONE` | Holds for the whole tree, as each level enforces it |
 | A subtask can't leave `Done` while its **parent is `Done`** | 409 `PARENT_TASK_DONE` | Otherwise a `Done` parent would have an unfinished subtask |
 
@@ -196,9 +196,10 @@ Every rule is a small pure function in [`task.rules.ts`](../backend/src/features
 - **422 Unprocessable** means the request refers to something unsuitable, such as a developer lacking a skill, and won't succeed as written.
 
 **The assignee rule in detail.**
+- **Direction matters:** statuses are ordered `To-do` → `In Progress` → `Done`. Without an assignee, any move backwards is allowed and any move forwards is rejected. Progress needs an owner, but stepping back, such as pausing or reopening work, shouldn't be blocked just because nobody owns the task right now.
 - **Judged after the update:** "assign Alice and start" in one request succeeds, and "unassign and start" fails.
-- **Covers leaving `To-do` only:** a task already underway can still be unassigned, for example when its developer moves on.
-- **Unassigning started work asks first.** The API allows it, but the UI asks for confirmation, because it loses information: who owns work in progress, or who completed finished work. The prompt for a `Done` task says the record of who completed it will be lost. This is a warning rather than a rule, because there are legitimate reasons to do it. See [section 7.4](#74-the-task-list-page).
+- **Unassigning is always allowed:** a task underway can lose its assignee, for example when its developer moves on. It then stays where it is, and can step back but not forward until someone is assigned.
+- **Unassigning started work asks first.** The API allows it, but the UI asks for confirmation, because it loses information: who owns work in progress, or who completed finished work. For an `In Progress` task, the prompt says it can't move forward until someone is assigned. For a `Done` task, it says the record of who completed it will be lost. This is a warning rather than a rule, because there are legitimate reasons to do it. See [section 7.4](#74-the-task-list-page).
 - **Interacts with the other rules:**
   - A parent can't be `Done` until all its subtasks are assigned and `Done`.
   - A pending task can't be started until its skills are known.
@@ -419,7 +420,7 @@ Code is grouped by feature rather than by file type. Everything for tasks lives 
 - **Developers lacking skills** appear disabled with the reason, such as "Bob (missing Frontend)".
 - **Blocked statuses** are disabled, with a hint under the control, linked by `aria-describedby` so screen readers announce it. The hint shows the most relevant reason:
   - "Locked: reopen the parent task to change this."
-  - "Assign someone to start this task."
+  - "Assign someone to move this task forward."
   - "Done unlocks when all subtasks are Done."
 - **Pending tasks** show "Detecting skills…" and "Assignable once skills are detected."
 
@@ -481,7 +482,7 @@ The tests target the places where bugs would matter most, through a few layers.
 
 | Layer | What it proves | Example |
 | ----- | -------------- | ------- |
-| **Pure unit tests** | Each rule and helper is correct in isolation | `assertAssignedToStart` for every status transition; `findVisibleTasks` keeps ancestors of matches |
+| **Pure unit tests** | Each rule and helper is correct in isolation | `assertAssignedToMoveForward` for every status transition; `findVisibleTasks` keeps ancestors of matches |
 | **Service unit tests** | The service applies rules in the right order and writes nothing on failure, with in-memory fakes and no database | An LLM `TypeError` isn't treated as an outage |
 | **API integration tests** | The whole backend works against real PostgreSQL | Concurrent Done/reopen requests keep the tree consistent; responses match the OpenAPI schemas |
 | **Database tests** | Both modes work, and data and seeding survive restarts | A second process on the same data directory fails with a clear message |

@@ -682,7 +682,7 @@
         "type": "object",
         "properties": {
           "status": {
-            "description": "Leaving To-do requires an assignee, which may be set in the same request.",
+            "description": "Moving forward (To-do → In Progress → Done) requires an assignee, which may be set in the same request. Moving backwards does not.",
             "$ref": "#/components/schemas/TaskStatus"
           },
           "assigneeId": {

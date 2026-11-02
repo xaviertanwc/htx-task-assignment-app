@@ -141,7 +141,7 @@ export interface components {
             subtasks: components["schemas"]["TaskInput"][];
         };
         TaskUpdate: {
-            /** @description Leaving To-do requires an assignee, which may be set in the same request. */
+            /** @description Moving forward (To-do → In Progress → Done) requires an assignee, which may be set in the same request. Moving backwards does not. */
             status?: components["schemas"]["TaskStatus"];
             assigneeId?: number | null;
         };

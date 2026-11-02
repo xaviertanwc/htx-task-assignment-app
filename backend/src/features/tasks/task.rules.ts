@@ -1,6 +1,6 @@
 import { AppError } from '../../shared/errors.js';
 import type { SkillsSource } from './task.repository.js';
-import type { TaskStatus } from './task.schemas.js';
+import { TASK_STATUSES, type TaskStatus } from './task.schemas.js';
 
 interface NamedSkill {
   id: number;
@@ -35,17 +35,22 @@ export function assertSkillsKnown(skillsSource: SkillsSource): void {
   }
 }
 
-/** Work can't start without an owner, so leaving To-do requires an assignee afterwards. */
-export function assertAssignedToStart(
+const progressOf = (status: TaskStatus) => TASK_STATUSES.indexOf(status);
+
+/**
+ * Work can only progress with an owner. Without an assignee, a task may move backwards
+ * (Done → In Progress → To-do) but never forwards.
+ */
+export function assertAssignedToMoveForward(
   currentStatus: TaskStatus,
   nextStatus: TaskStatus,
   assigneeAfterUpdate: number | null,
 ): void {
-  if (currentStatus === 'To-do' && nextStatus !== 'To-do' && assigneeAfterUpdate === null) {
+  if (assigneeAfterUpdate === null && progressOf(nextStatus) > progressOf(currentStatus)) {
     throw new AppError(
       'conflict',
       'TASK_UNASSIGNED',
-      'Assign a developer before moving this task out of To-do.',
+      'Assign a developer before moving this task forward.',
     );
   }
 }

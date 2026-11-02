@@ -56,7 +56,8 @@ export function parseCreateTask(body: unknown): TaskInput {
 export const updateTaskSchema = z
   .strictObject({
     status: taskStatusSchema.optional().meta({
-      description: 'Leaving To-do requires an assignee, which may be set in the same request.',
+      description:
+        'Moving forward (To-do → In Progress → Done) requires an assignee, which may be set in the same request. Moving backwards does not.',
     }),
     assigneeId: idSchema.nullable().optional(),
   })

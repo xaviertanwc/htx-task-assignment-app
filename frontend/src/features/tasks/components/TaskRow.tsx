@@ -8,7 +8,7 @@ import {
   canMarkDone,
   isStatusAllowed,
   missingSkills,
-  needsAssigneeToStart,
+  needsAssigneeToMoveForward,
   skillsPending,
   unassignWarning,
 } from '../lib/taskRules';
@@ -48,7 +48,7 @@ function SkillsCell({ task }: { task: Task }) {
 
 function statusHint(task: Task, parentDone: boolean): string | undefined {
   if (parentDone) return 'Locked: reopen the parent task to change this.';
-  if (needsAssigneeToStart(task)) return 'Assign someone to start this task.';
+  if (needsAssigneeToMoveForward(task)) return 'Assign someone to move this task forward.';
   if (!canMarkDone(task)) return 'Done unlocks when all subtasks are Done.';
   return undefined;
 }

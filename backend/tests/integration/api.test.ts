@@ -368,7 +368,7 @@ describe('assigning tasks', () => {
   });
 });
 
-describe('starting work requires an assignee', () => {
+describe('moving forward requires an assignee', () => {
   it.each(['In Progress', 'Done'])('blocks an unassigned task moving to %s', async (status) => {
     const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
     const res = await patchTask(task.id, { status });
@@ -410,11 +410,32 @@ describe('starting work requires an assignee', () => {
     });
   });
 
-  it('governs only leaving To-do: a started task can still be unassigned', async () => {
+  it('lets an unassigned task move backwards but not forwards', async () => {
     const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
     await patchTask(task.id, { assigneeId: ALICE, status: 'In Progress' }).expect(200);
     await patchTask(task.id, { assigneeId: null }).expect(200);
-    await patchTask(task.id, { status: 'Done' }).expect(200);
+
+    const forward = await patchTask(task.id, { status: 'Done' });
+    expect(forward.status).toBe(409);
+    expect(forward.body.error.code).toBe('TASK_UNASSIGNED');
+
+    await patchTask(task.id, { status: 'To-do' }).expect(200);
+    expect((await patchTask(task.id, { status: 'In Progress' })).status).toBe(409);
+  });
+
+  it('lets an unassigned Done task be reopened', async () => {
+    const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
+    await patchTask(task.id, { assigneeId: ALICE, status: 'Done' }).expect(200);
+    await patchTask(task.id, { assigneeId: null }).expect(200);
+    await patchTask(task.id, { status: 'In Progress' }).expect(200);
+  });
+
+  it('allows finishing once someone is assigned again', async () => {
+    const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
+    await patchTask(task.id, { assigneeId: ALICE, status: 'In Progress' }).expect(200);
+    await patchTask(task.id, { assigneeId: null }).expect(200);
+    const res = await patchTask(task.id, { assigneeId: CAROL, status: 'Done' });
+    expect(res.body.data).toMatchObject({ assignee: { id: CAROL }, status: 'Done' });
   });
 });
 

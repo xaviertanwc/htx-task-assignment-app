@@ -88,22 +88,30 @@ describe('TaskListPage', () => {
     expect(carol).toHaveTextContent(/^Carol$/);
   });
 
-  it('blocks leaving To-do with an explanation until someone is assigned', async () => {
+  it('blocks forward moves with an explanation until someone is assigned', async () => {
     stubApi({}, [
-      makeTask({ id: 1, title: 'Unassigned' }),
-      makeTask({ id: 2, title: 'Started', status: 'In Progress' }),
+      makeTask({ id: 1, title: 'Unassigned', status: 'To-do' }),
+      makeTask({ id: 2, title: 'Orphaned', status: 'In Progress' }),
+      makeTask({ id: 3, title: 'Finished', status: 'Done' }),
     ]);
     renderApp('/');
+    const allowed = (element: HTMLElement) =>
+      options(element)
+        .filter((option) => !(option as HTMLOptionElement).disabled)
+        .map((option) => option.textContent);
 
-    const unassigned = await select('Status of Unassigned');
-    expect(within(unassigned).getByRole('option', { name: 'To-do' })).toBeEnabled();
-    expect(within(unassigned).getByRole('option', { name: 'In Progress' })).toBeDisabled();
-    expect(within(unassigned).getByRole('option', { name: 'Done' })).toBeDisabled();
-    expect(unassigned).toHaveAccessibleDescription('Assign someone to start this task.');
+    const todo = await select('Status of Unassigned');
+    expect(allowed(todo)).toEqual(['To-do']);
+    expect(todo).toHaveAccessibleDescription('Assign someone to move this task forward.');
 
-    // The rule governs leaving To-do only, so an unassigned task already underway can move on.
-    const started = await select('Status of Started');
-    expect(within(started).getByRole('option', { name: 'Done' })).toBeEnabled();
+    // Backwards is always allowed, so an unassigned task can be reopened or paused.
+    const inProgress = await select('Status of Orphaned');
+    expect(allowed(inProgress)).toEqual(['To-do', 'In Progress']);
+    expect(inProgress).toHaveAccessibleDescription('Assign someone to move this task forward.');
+
+    const done = await select('Status of Finished');
+    expect(allowed(done)).toEqual(['To-do', 'In Progress', 'Done']);
+    expect(done).not.toHaveAccessibleDescription();
   });
 
   it('disables Done with an explanation until all subtasks are Done', async () => {
@@ -209,6 +217,7 @@ describe('TaskListPage', () => {
 
       const dialog = screen.getByRole('dialog', { name: 'Unassign Carol?' });
       expect(dialog).toHaveTextContent('leaves started work without an owner');
+      expect(dialog).toHaveTextContent("can't move forward until someone is assigned");
       await user.click(within(dialog).getByRole('button', { name: 'Keep Carol' }));
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  assertAssignedToStart,
+  assertAssignedToMoveForward,
   assertCanLeaveDone,
   assertCanMarkDone,
   assertDeveloperQualified,
@@ -45,14 +45,23 @@ describe('assignment rules', () => {
 });
 
 describe('status rules', () => {
-  it('requires an assignee to leave To-do, judged after the update', () => {
-    expect(codeOf(() => assertAssignedToStart('To-do', 'In Progress', null))).toBe(
-      'TASK_UNASSIGNED',
-    );
-    expect(codeOf(() => assertAssignedToStart('To-do', 'Done', null))).toBe('TASK_UNASSIGNED');
-    expect(codeOf(() => assertAssignedToStart('To-do', 'In Progress', 7))).toBeUndefined();
-    expect(codeOf(() => assertAssignedToStart('To-do', 'To-do', null))).toBeUndefined();
-    expect(codeOf(() => assertAssignedToStart('In Progress', 'Done', null))).toBeUndefined();
+  it.each([
+    ['To-do', 'In Progress'],
+    ['To-do', 'Done'],
+    ['In Progress', 'Done'],
+  ] as const)('blocks an unassigned task moving forward from %s to %s', (from, to) => {
+    expect(codeOf(() => assertAssignedToMoveForward(from, to, null))).toBe('TASK_UNASSIGNED');
+    expect(codeOf(() => assertAssignedToMoveForward(from, to, 7))).toBeUndefined();
+  });
+
+  it.each([
+    ['Done', 'In Progress'],
+    ['Done', 'To-do'],
+    ['In Progress', 'To-do'],
+    ['To-do', 'To-do'],
+    ['In Progress', 'In Progress'],
+  ] as const)('lets an unassigned task move from %s to %s', (from, to) => {
+    expect(codeOf(() => assertAssignedToMoveForward(from, to, null))).toBeUndefined();
   });
 
   it('blocks Done while any subtask is unfinished', () => {

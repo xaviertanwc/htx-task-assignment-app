@@ -11,13 +11,20 @@ export function canMarkDone(task: Task): boolean {
   return task.subtasks.every((subtask) => subtask.status === 'Done');
 }
 
-/** Mirrors the backend: work can't start without an owner. */
-export function needsAssigneeToStart(task: Task): boolean {
-  return task.status === 'To-do' && task.assignee === null;
+const progressOf = (status: TaskStatus) => TASK_STATUSES.indexOf(status);
+
+/** Mirrors the backend: without an assignee, a task can move backwards but not forwards. */
+export function isBlockedByMissingAssignee(task: Task, status: TaskStatus): boolean {
+  return task.assignee === null && progressOf(status) > progressOf(task.status);
+}
+
+/** True when the task has somewhere to move forward to, but no assignee to do it. */
+export function needsAssigneeToMoveForward(task: Task): boolean {
+  return task.assignee === null && task.status !== 'Done';
 }
 
 export function isStatusAllowed(task: Task, status: TaskStatus): boolean {
-  if (status !== 'To-do' && needsAssigneeToStart(task)) return false;
+  if (isBlockedByMissingAssignee(task, status)) return false;
   return status !== 'Done' || canMarkDone(task);
 }
 
@@ -30,7 +37,7 @@ export function unassignWarning(task: Task): string | null {
   if (task.status === 'Done') {
     return `This task is Done. Unassigning ${task.assignee.name} removes the record of who completed it.`;
   }
-  return `This task is ${task.status}. Unassigning ${task.assignee.name} leaves started work without an owner.`;
+  return `This task is ${task.status}. Unassigning ${task.assignee.name} leaves started work without an owner, and it can't move forward until someone is assigned.`;
 }
 
 export function skillsPending(task: Task): boolean {

@@ -237,7 +237,7 @@ Only standard PostgreSQL features are used, so behaviour is the same in both mod
 
 **Assignment.** A developer must have every skill a task requires. A task whose skills are still pending can't be assigned, because nobody can be shown to qualify. Together with the rule below, this also means a pending task can't be started.
 
-**Starting work.** An unassigned task can't move out of `To-do`. Assigning and starting in the same request is allowed, because the task ends up assigned. The rule governs leaving `To-do` only, so a task already underway can still be unassigned, for example when its developer moves on. The status dropdown disables the other statuses and says why, and unassigning an In Progress or Done task asks for confirmation first.
+**Moving forward needs an assignee.** Without an assignee, a task can move backwards (`Done` → `In Progress` → `To-do`) but never forwards (`To-do` → `In Progress` → `Done`). Assigning and moving forward in the same request is allowed, because the task ends up assigned. A task can still be unassigned at any status, for example when its developer moves on, but the UI asks for confirmation first if the task is `In Progress` or `Done`. The status dropdown disables blocked moves and says why.
 
 **Done.** A task can only move to `Done` when all its direct subtasks are `Done`. As each subtask follows the same rule, it holds for the whole tree. Reopening a subtask under a `Done` parent is rejected as well, since it would break the rule: the parent must be reopened first. I chose this over reopening the parent automatically, so a status never changes without someone asking for it.
 
@@ -334,7 +334,7 @@ Successful responses wrap their result in `data`. This returns `201`:
 | 400    | `BAD_REQUEST`              | The body is malformed or too large           |
 | 404    | `TASK_NOT_FOUND`, `DEVELOPER_NOT_FOUND`, `SKILL_NOT_FOUND` | The resource in the path doesn't exist |
 | 404    | `ROUTE_NOT_FOUND`          | No such route                                |
-| 409    | `TASK_UNASSIGNED`          | Moving an unassigned task out of `To-do`     |
+| 409    | `TASK_UNASSIGNED`          | Moving an unassigned task forward            |
 | 409    | `SUBTASKS_NOT_DONE`        | Marking `Done` with unfinished subtasks      |
 | 409    | `PARENT_TASK_DONE`         | Reopening a subtask under a `Done` parent    |
 | 409    | `TASK_SKILLS_PENDING`      | Assigning a task whose skills aren't known   |
