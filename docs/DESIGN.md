@@ -197,7 +197,8 @@ Every rule is a small pure function in [`task.rules.ts`](../backend/src/features
 
 **The assignee rule in detail.**
 - **Judged after the update:** "assign Alice and start" in one request succeeds, and "unassign and start" fails.
-- **Covers leaving `To-do` only:** a task already underway can still be unassigned, for example when its developer moves on. A stricter version, where started tasks must always have an assignee, would be a one-line change if wanted.
+- **Covers leaving `To-do` only:** a task already underway can still be unassigned, for example when its developer moves on.
+- **Unassigning started work asks first.** The API allows it, but the UI asks for confirmation, because it loses information: who owns work in progress, or who completed finished work. The prompt for a `Done` task says the record of who completed it will be lost. This is a warning rather than a rule, because there are legitimate reasons to do it. See [section 7.4](#74-the-task-list-page).
 - **Interacts with the other rules:**
   - A parent can't be `Done` until all its subtasks are assigned and `Done`.
   - A pending task can't be started until its skills are known.
@@ -425,6 +426,8 @@ Code is grouped by feature rather than by file type. Everything for tasks lives 
 The frontend checks mirror the backend rules for a better experience, but **the backend remains the authority**. If the two ever disagree, the server's rejection is shown, and the change is rolled back.
 
 **Native `<select>` rather than a custom dropdown.** Native controls give keyboard, screen reader and mobile behaviour for free. The cost is that options can only hold text, so explanations are written in the option label or in a hint below the control. Tooltips weren't used, because they can't be reached by keyboard or touch.
+
+**Confirming destructive changes.** Unassigning an `In Progress` or `Done` task opens a confirmation dialog, which explains what will be lost for that status. Cancelling sends nothing, and the dropdown keeps showing the current developer. Confirmations are kept to changes that lose information. Unassigning a `To-do` task, or switching to another qualified developer, doesn't ask, because asking too often trains people to click through without reading. Keyboard focus defaults to the safe button ("Keep Carol"), and closing the dialog returns focus to the dropdown.
 
 **Optimistic updates.** Changing a status or assignee updates the screen at once:
 

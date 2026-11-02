@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 interface ConfirmDialogProps {
   title: string;
@@ -14,12 +14,19 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   const { title, message, confirmLabel, cancelLabel, onConfirm, onCancel } = props;
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  // Captured while rendering, because by the time effects run, autoFocus has already moved focus.
+  const [opener] = useState(() => document.activeElement);
 
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
-    return () => dialog?.close();
-  }, []);
+    return () => {
+      dialog?.close();
+      // The browser restores focus itself only when a dialog closes in place. React removes this
+      // one from the page, so focus would fall to the body, losing a keyboard user's position.
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, [opener]);
 
   return (
     <dialog

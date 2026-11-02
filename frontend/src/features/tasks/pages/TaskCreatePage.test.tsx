@@ -121,6 +121,7 @@ describe('TaskCreatePage', () => {
     expect(dialog).toHaveTextContent('1 nested subtask.');
     await user.click(within(dialog).getByRole('button', { name: 'Keep' }));
     expect(screen.getByRole('group', { name: 'Subtask 1.1.1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove Subtask 1.1' })).toHaveFocus();
 
     await user.click(screen.getByRole('button', { name: 'Remove Subtask 1.1' }));
     await user.click(screen.getByRole('button', { name: 'Remove' }));

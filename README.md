@@ -237,7 +237,7 @@ Only standard PostgreSQL features are used, so behaviour is the same in both mod
 
 **Assignment.** A developer must have every skill a task requires. A task whose skills are still pending can't be assigned, because nobody can be shown to qualify. Together with the rule below, this also means a pending task can't be started.
 
-**Starting work.** An unassigned task can't move out of `To-do`. Assigning and starting in the same request is allowed, because the task ends up assigned. The rule governs leaving `To-do` only, so a task already underway can still be unassigned, for example when its developer moves on. The status dropdown disables the other statuses and says why.
+**Starting work.** An unassigned task can't move out of `To-do`. Assigning and starting in the same request is allowed, because the task ends up assigned. The rule governs leaving `To-do` only, so a task already underway can still be unassigned, for example when its developer moves on. The status dropdown disables the other statuses and says why, and unassigning an In Progress or Done task asks for confirmation first.
 
 **Done.** A task can only move to `Done` when all its direct subtasks are `Done`. As each subtask follows the same rule, it holds for the whole tree. Reopening a subtask under a `Done` parent is rejected as well, since it would break the rule: the parent must be reopened first. I chose this over reopening the parent automatically, so a status never changes without someone asking for it.
 

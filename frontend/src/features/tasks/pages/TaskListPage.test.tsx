@@ -185,6 +185,67 @@ describe('TaskListPage', () => {
     expect(sent).toEqual([{ route: 'PATCH /tasks/1', body: { status: 'In Progress' } }]);
   });
 
+  describe('unassigning', () => {
+    it('unassigns a To-do task without asking', async () => {
+      const sent = stubApi({ 'PATCH /tasks/1': () => ({ body: { data: {} } }) }, [
+        makeTask({ id: 1, title: 'Not started', assignee: CAROL }),
+      ]);
+      renderApp('/');
+      await userEvent.selectOptions(await select('Assignee of Not started'), 'Unassigned');
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(sent).toEqual([{ route: 'PATCH /tasks/1', body: { assigneeId: null } }]),
+      );
+    });
+
+    it('warns before unassigning started work, and keeps the developer on cancel', async () => {
+      const sent = stubApi({}, [
+        makeTask({ id: 1, title: 'Started', assignee: CAROL, status: 'In Progress' }),
+      ]);
+      renderApp('/');
+      const user = userEvent.setup();
+      await user.selectOptions(await select('Assignee of Started'), 'Unassigned');
+
+      const dialog = screen.getByRole('dialog', { name: 'Unassign Carol?' });
+      expect(dialog).toHaveTextContent('leaves started work without an owner');
+      await user.click(within(dialog).getByRole('button', { name: 'Keep Carol' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(await select('Assignee of Started')).toHaveValue('3');
+      expect(await select('Assignee of Started')).toHaveFocus();
+      expect(sent).toEqual([]);
+    });
+
+    it('unassigns finished work once confirmed, explaining what is lost', async () => {
+      const sent = stubApi({ 'PATCH /tasks/1': () => ({ body: { data: {} } }) }, [
+        makeTask({ id: 1, title: 'Finished', assignee: CAROL, status: 'Done' }),
+      ]);
+      renderApp('/');
+      const user = userEvent.setup();
+      await user.selectOptions(await select('Assignee of Finished'), 'Unassigned');
+
+      const dialog = screen.getByRole('dialog', { name: 'Unassign Carol?' });
+      expect(dialog).toHaveTextContent('removes the record of who completed it');
+      await user.click(within(dialog).getByRole('button', { name: 'Unassign' }));
+
+      await waitFor(() =>
+        expect(sent).toEqual([{ route: 'PATCH /tasks/1', body: { assigneeId: null } }]),
+      );
+      expect(await screen.findByText('Assignee removed.')).toBeInTheDocument();
+    });
+
+    it('does not ask when switching to another qualified developer', async () => {
+      const sent = stubApi({ 'PATCH /tasks/1': () => ({ body: { data: {} } }) }, [
+        makeTask({ id: 1, title: 'Started', assignee: CAROL, status: 'In Progress' }),
+      ]);
+      renderApp('/');
+      await userEvent.selectOptions(await select('Assignee of Started'), 'Alice');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      await waitFor(() => expect(sent).toHaveLength(1));
+    });
+  });
+
   it('rolls back and shows the server message when an update is rejected', async () => {
     stubApi(
       {

@@ -1,5 +1,6 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import type { Developer, Task, TaskStatus } from '../../../shared/api/types';
+import { ConfirmDialog } from '../../../shared/ui/ConfirmDialog';
 import { useToast } from '../../../shared/ui/Toast';
 import { useUpdateTask } from '../api/taskQueries';
 import {
@@ -9,6 +10,7 @@ import {
   missingSkills,
   needsAssigneeToStart,
   skillsPending,
+  unassignWarning,
 } from '../lib/taskRules';
 import { subtaskProgress, type TaskVisibility } from '../lib/taskTree';
 
@@ -57,6 +59,7 @@ export function TaskRow({ task, view, depth = 0, parentDone = false }: TaskRowPr
   const update = useUpdateTask(task.id);
   const toast = useToast();
   const hintId = useId();
+  const [confirmingUnassign, setConfirmingUnassign] = useState(false);
 
   const save = (change: Parameters<typeof update.mutate>[0], success: string) =>
     update.mutate(change, {
@@ -64,7 +67,17 @@ export function TaskRow({ task, view, depth = 0, parentDone = false }: TaskRowPr
       onError: (error) => toast('error', error.message),
     });
 
+  const changeAssignee = (value: string) => {
+    if (value === '' && unassignWarning(task)) {
+      // The select stays on the current developer until the user confirms.
+      setConfirmingUnassign(true);
+      return;
+    }
+    save({ assigneeId: value === '' ? null : Number(value) }, 'Assignee updated.');
+  };
+
   const progress = subtaskProgress(task);
+  const warning = confirmingUnassign ? unassignWarning(task) : null;
   const hint = statusHint(task, parentDone);
   const pending = skillsPending(task);
   // While filtering, a matching subtask must not be hidden by a collapsed parent.
@@ -140,12 +153,7 @@ export function TaskRow({ task, view, depth = 0, parentDone = false }: TaskRowPr
               aria-label={`Assignee of ${task.title}`}
               value={task.assignee?.id ?? ''}
               disabled={pending}
-              onChange={(event) =>
-                save(
-                  { assigneeId: event.target.value === '' ? null : Number(event.target.value) },
-                  'Assignee updated.',
-                )
-              }
+              onChange={(event) => changeAssignee(event.target.value)}
             >
               <option value="">Unassigned</option>
               {developers.map((developer) => {
@@ -160,6 +168,19 @@ export function TaskRow({ task, view, depth = 0, parentDone = false }: TaskRowPr
               })}
             </select>
             {pending && <p className="control-hint">Assignable once skills are detected.</p>}
+            {warning && task.assignee && (
+              <ConfirmDialog
+                title={`Unassign ${task.assignee.name}?`}
+                message={warning}
+                confirmLabel="Unassign"
+                cancelLabel={`Keep ${task.assignee.name}`}
+                onConfirm={() => {
+                  setConfirmingUnassign(false);
+                  save({ assigneeId: null }, 'Assignee removed.');
+                }}
+                onCancel={() => setConfirmingUnassign(false)}
+              />
+            )}
           </div>
         </td>
       </tr>
