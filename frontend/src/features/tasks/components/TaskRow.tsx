@@ -2,7 +2,14 @@ import { useId } from 'react';
 import type { Developer, Task, TaskStatus } from '../../../shared/api/types';
 import { useToast } from '../../../shared/ui/Toast';
 import { useUpdateTask } from '../api/taskQueries';
-import { TASK_STATUSES, canMarkDone, missingSkills, skillsPending } from '../lib/taskRules';
+import {
+  TASK_STATUSES,
+  canMarkDone,
+  isStatusAllowed,
+  missingSkills,
+  needsAssigneeToStart,
+  skillsPending,
+} from '../lib/taskRules';
 import { subtaskProgress, type TaskVisibility } from '../lib/taskTree';
 
 export interface TaskTreeView {
@@ -39,6 +46,7 @@ function SkillsCell({ task }: { task: Task }) {
 
 function statusHint(task: Task, parentDone: boolean): string | undefined {
   if (parentDone) return 'Locked: reopen the parent task to change this.';
+  if (needsAssigneeToStart(task)) return 'Assign someone to start this task.';
   if (!canMarkDone(task)) return 'Done unlocks when all subtasks are Done.';
   return undefined;
 }
@@ -114,11 +122,7 @@ export function TaskRow({ task, view, depth = 0, parentDone = false }: TaskRowPr
               }
             >
               {TASK_STATUSES.map((status) => (
-                <option
-                  key={status}
-                  value={status}
-                  disabled={status === 'Done' && !canMarkDone(task)}
-                >
+                <option key={status} value={status} disabled={!isStatusAllowed(task, status)}>
                   {status}
                 </option>
               ))}

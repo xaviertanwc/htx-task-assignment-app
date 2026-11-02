@@ -33,6 +33,7 @@ function setup(options: {
         insert: async (task) => inserted.push(task),
         lock: async () => ({
           status: 'To-do',
+          assigneeId: null,
           skillsSource: 'user',
           skills: [DESIGN],
           parentStatus: null,
@@ -122,8 +123,21 @@ describe('updating tasks', () => {
     expect(update).toHaveBeenCalledOnce();
   });
 
+  it('requires an assignee to start, counting one assigned in the same update', async () => {
+    const { service, update } = setup({});
+    await expect(service.update(1, { status: 'In Progress' })).rejects.toMatchObject({
+      code: 'TASK_UNASSIGNED',
+    });
+    expect(update).not.toHaveBeenCalled();
+    await service.update(1, { status: 'In Progress', assigneeId: DESIGNER.id });
+    expect(update).toHaveBeenCalledOnce();
+  });
+
   it('applies the Done rule', async () => {
-    const { service } = setup({ unfinished: [{ id: 2, title: 'Open' }] });
+    const { service } = setup({
+      locked: { assigneeId: DESIGNER.id },
+      unfinished: [{ id: 2, title: 'Open' }],
+    });
     await expect(service.update(1, { status: 'Done' })).rejects.toMatchObject({
       code: 'SUBTASKS_NOT_DONE',
     });

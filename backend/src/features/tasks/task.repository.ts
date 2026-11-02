@@ -25,6 +25,7 @@ export interface NewTask {
 
 export interface LockedTask {
   status: TaskStatus;
+  assigneeId: number | null;
   skillsSource: SkillsSource;
   parentStatus: TaskStatus | null;
   skills: { id: number; name: string }[];
@@ -142,15 +143,16 @@ function createTaskTransaction(db: Queryable): TaskTransaction {
       }
       const { rows } = await db.query<{
         status: TaskStatus;
+        assignee_id: number | null;
         skills_source: SkillsSource;
         skills: LockedTask['skills'];
       }>(
-        `SELECT t.status, t.skills_source, ${SKILLS_OF_TASK} AS skills
+        `SELECT t.status, t.assignee_id, t.skills_source, ${SKILLS_OF_TASK} AS skills
          FROM tasks t WHERE t.id = $1 FOR UPDATE OF t`,
         [id],
       );
-      const { status, skills_source: skillsSource, skills } = rows[0]!;
-      return { status, skillsSource, skills, parentStatus };
+      const { status, assignee_id: assigneeId, skills_source: skillsSource, skills } = rows[0]!;
+      return { status, assigneeId, skillsSource, skills, parentStatus };
     },
 
     async findUnfinishedSubtasks(parentId) {

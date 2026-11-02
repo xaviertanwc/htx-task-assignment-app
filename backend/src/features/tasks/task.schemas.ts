@@ -55,7 +55,9 @@ export function parseCreateTask(body: unknown): TaskInput {
 
 export const updateTaskSchema = z
   .strictObject({
-    status: taskStatusSchema.optional(),
+    status: taskStatusSchema.optional().meta({
+      description: 'Leaving To-do requires an assignee, which may be set in the same request.',
+    }),
     assigneeId: idSchema.nullable().optional(),
   })
   .refine((body) => body.status !== undefined || body.assigneeId !== undefined, {

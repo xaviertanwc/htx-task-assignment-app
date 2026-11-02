@@ -5,6 +5,7 @@ import type { Skill, SkillRepository } from '../skills/skill.repository.js';
 import { resolveSkillIds, type WarningLogger } from './skill.resolution.js';
 import type { Task, TaskRepository, TaskTransaction } from './task.repository.js';
 import {
+  assertAssignedToStart,
   assertCanLeaveDone,
   assertCanMarkDone,
   assertDeveloperQualified,
@@ -116,6 +117,12 @@ export function createTaskService({
         const current = await tx.lock(id);
         if (!current) throw notFound('Task', id);
 
+        if (update.status !== undefined) {
+          // Judged on the assignee after this update, so assigning and starting can be one request.
+          const assigneeAfterUpdate =
+            update.assigneeId !== undefined ? update.assigneeId : current.assigneeId;
+          assertAssignedToStart(current.status, update.status, assigneeAfterUpdate);
+        }
         if (update.status === 'Done') {
           assertCanMarkDone(await tx.findUnfinishedSubtasks(id));
         } else if (update.status !== undefined) {

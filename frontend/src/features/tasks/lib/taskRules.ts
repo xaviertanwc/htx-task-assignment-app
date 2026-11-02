@@ -11,6 +11,16 @@ export function canMarkDone(task: Task): boolean {
   return task.subtasks.every((subtask) => subtask.status === 'Done');
 }
 
+/** Mirrors the backend: work can't start without an owner. */
+export function needsAssigneeToStart(task: Task): boolean {
+  return task.status === 'To-do' && task.assignee === null;
+}
+
+export function isStatusAllowed(task: Task, status: TaskStatus): boolean {
+  if (status !== 'To-do' && needsAssigneeToStart(task)) return false;
+  return status !== 'Done' || canMarkDone(task);
+}
+
 export function skillsPending(task: Task): boolean {
   return task.skillsSource === 'pending';
 }

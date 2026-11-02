@@ -77,6 +77,17 @@ const createTask = async (body: object) => {
 const patchTask = (id: number, body: object) =>
   request(app).patch(`/api/v1/tasks/${id}`).send(body);
 
+interface TreeNode {
+  id: number;
+  subtasks: TreeNode[];
+}
+
+/** Assigns every task in a tree, so status rules other than the assignee rule can be exercised. */
+async function assignTree(task: TreeNode) {
+  await patchTask(task.id, { assigneeId: CAROL }).expect(200);
+  for (const subtask of task.subtasks) await assignTree(subtask);
+}
+
 describe('migrations', () => {
   it('are idempotent', async () => {
     await expect(runMigrations(database.pool)).resolves.toEqual([]);
@@ -267,9 +278,10 @@ describe('identifying skills with the LLM', () => {
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('TASK_SKILLS_PENDING');
 
-    // Only assigning is blocked: the subtask and the task's status are unaffected.
+    // The subtask is unaffected, but the pending task can't start, since it can't be assigned.
     await patchTask(root.subtasks[0].id, { assigneeId: ALICE }).expect(200);
-    await patchTask(root.id, { status: 'In Progress' }).expect(200);
+    const start = await patchTask(root.id, { status: 'In Progress' });
+    expect(start.body.error.code).toBe('TASK_UNASSIGNED');
   });
 
   it('keeps only the unresolved titles pending', async () => {
@@ -356,9 +368,59 @@ describe('assigning tasks', () => {
   });
 });
 
+describe('starting work requires an assignee', () => {
+  it.each(['In Progress', 'Done'])('blocks an unassigned task moving to %s', async (status) => {
+    const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
+    const res = await patchTask(task.id, { status });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('TASK_UNASSIGNED');
+    expect((await request(app).get(`/api/v1/tasks/${task.id}`)).body.data.status).toBe('To-do');
+  });
+
+  it('applies to subtasks too', async () => {
+    const root = await createTask({
+      title: 'x',
+      skillIds: [FRONTEND],
+      subtasks: [{ title: 'y', skillIds: [FRONTEND] }],
+    });
+    const res = await patchTask(root.subtasks[0].id, { status: 'In Progress' });
+    expect(res.body.error.code).toBe('TASK_UNASSIGNED');
+  });
+
+  it('allows To-do to stay To-do', async () => {
+    const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
+    await patchTask(task.id, { status: 'To-do' }).expect(200);
+  });
+
+  it('allows assigning and starting in one request', async () => {
+    const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
+    const res = await patchTask(task.id, { assigneeId: ALICE, status: 'In Progress' });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ assignee: { id: ALICE }, status: 'In Progress' });
+  });
+
+  it('blocks unassigning and starting in one request', async () => {
+    const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
+    await patchTask(task.id, { assigneeId: ALICE }).expect(200);
+    const res = await patchTask(task.id, { assigneeId: null, status: 'In Progress' });
+    expect(res.body.error.code).toBe('TASK_UNASSIGNED');
+    expect((await request(app).get(`/api/v1/tasks/${task.id}`)).body.data).toMatchObject({
+      assignee: { id: ALICE },
+      status: 'To-do',
+    });
+  });
+
+  it('governs only leaving To-do: a started task can still be unassigned', async () => {
+    const task = await createTask({ title: 'x', skillIds: [FRONTEND] });
+    await patchTask(task.id, { assigneeId: ALICE, status: 'In Progress' }).expect(200);
+    await patchTask(task.id, { assigneeId: null }).expect(200);
+    await patchTask(task.id, { status: 'Done' }).expect(200);
+  });
+});
+
 describe('the Done rule', () => {
-  const nestedTree = () =>
-    createTask({
+  const nestedTree = async () => {
+    const root = await createTask({
       title: 'root',
       skillIds: [FRONTEND],
       subtasks: [
@@ -369,6 +431,9 @@ describe('the Done rule', () => {
         },
       ],
     });
+    await assignTree(root);
+    return root;
+  };
 
   it('blocks Done until all subtasks are Done, at every level', async () => {
     const root = await nestedTree();
@@ -399,6 +464,7 @@ describe('the Done rule', () => {
       skillIds: [FRONTEND],
       subtasks: [{ title: 'child', skillIds: [FRONTEND] }],
     });
+    await assignTree(root);
     const child = root.subtasks[0];
     await patchTask(child.id, { status: 'Done' }).expect(200);
     await patchTask(root.id, { status: 'Done' }).expect(200);
@@ -418,6 +484,7 @@ describe('the Done rule', () => {
         skillIds: [FRONTEND],
         subtasks: [{ title: 'child', skillIds: [FRONTEND] }],
       });
+      await assignTree(root);
       const child = root.subtasks[0];
       await patchTask(child.id, { status: 'Done' }).expect(200);
 

@@ -287,7 +287,7 @@
             }
           },
           "409": {
-            "description": "The status rule was broken (SUBTASKS_NOT_DONE, PARENT_TASK_DONE) or skills are still pending (TASK_SKILLS_PENDING).",
+            "description": "A status rule was broken (TASK_UNASSIGNED, SUBTASKS_NOT_DONE, PARENT_TASK_DONE) or skills are still pending (TASK_SKILLS_PENDING).",
             "content": {
               "application/json": {
                 "schema": {
@@ -682,6 +682,7 @@
         "type": "object",
         "properties": {
           "status": {
+            "description": "Leaving To-do requires an assignee, which may be set in the same request.",
             "$ref": "#/components/schemas/TaskStatus"
           },
           "assigneeId": {

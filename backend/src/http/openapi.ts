@@ -148,7 +148,7 @@ export const openApiDocument = {
           '400': errorResponse('The body failed validation.'),
           '404': errorResponse('No such task.'),
           '409': errorResponse(
-            'The status rule was broken (SUBTASKS_NOT_DONE, PARENT_TASK_DONE) or skills are still pending (TASK_SKILLS_PENDING).',
+            'A status rule was broken (TASK_UNASSIGNED, SUBTASKS_NOT_DONE, PARENT_TASK_DONE) or skills are still pending (TASK_SKILLS_PENDING).',
           ),
           '422': errorResponse(
             'The developer does not exist or lacks a required skill (DEVELOPER_NOT_FOUND, DEVELOPER_MISSING_SKILLS).',

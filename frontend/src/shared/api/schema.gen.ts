@@ -141,6 +141,7 @@ export interface components {
             subtasks: components["schemas"]["TaskInput"][];
         };
         TaskUpdate: {
+            /** @description Leaving To-do requires an assignee, which may be set in the same request. */
             status?: components["schemas"]["TaskStatus"];
             assigneeId?: number | null;
         };
@@ -395,7 +396,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The status rule was broken (SUBTASKS_NOT_DONE, PARENT_TASK_DONE) or skills are still pending (TASK_SKILLS_PENDING). */
+            /** @description A status rule was broken (TASK_UNASSIGNED, SUBTASKS_NOT_DONE, PARENT_TASK_DONE) or skills are still pending (TASK_SKILLS_PENDING). */
             409: {
                 headers: {
                     [name: string]: unknown;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertAssignedToStart,
   assertCanLeaveDone,
   assertCanMarkDone,
   assertDeveloperQualified,
@@ -44,6 +45,16 @@ describe('assignment rules', () => {
 });
 
 describe('status rules', () => {
+  it('requires an assignee to leave To-do, judged after the update', () => {
+    expect(codeOf(() => assertAssignedToStart('To-do', 'In Progress', null))).toBe(
+      'TASK_UNASSIGNED',
+    );
+    expect(codeOf(() => assertAssignedToStart('To-do', 'Done', null))).toBe('TASK_UNASSIGNED');
+    expect(codeOf(() => assertAssignedToStart('To-do', 'In Progress', 7))).toBeUndefined();
+    expect(codeOf(() => assertAssignedToStart('To-do', 'To-do', null))).toBeUndefined();
+    expect(codeOf(() => assertAssignedToStart('In Progress', 'Done', null))).toBeUndefined();
+  });
+
   it('blocks Done while any subtask is unfinished', () => {
     expect(codeOf(() => assertCanMarkDone([{ id: 1, title: 'Open' }]))).toBe('SUBTASKS_NOT_DONE');
     expect(codeOf(() => assertCanMarkDone([]))).toBeUndefined();

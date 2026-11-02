@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import type { Task } from '../../../shared/api/types';
 import { DATA, DESIGN, makeTask, renderApp, stubApi } from '../../../test/helpers';
 
+const CAROL = { id: 3, name: 'Carol' };
+
 const select = (name: string) => screen.findByRole('combobox', { name });
 const options = (element: HTMLElement) => within(element).getAllByRole('option');
 
@@ -86,16 +88,36 @@ describe('TaskListPage', () => {
     expect(carol).toHaveTextContent(/^Carol$/);
   });
 
+  it('blocks leaving To-do with an explanation until someone is assigned', async () => {
+    stubApi({}, [
+      makeTask({ id: 1, title: 'Unassigned' }),
+      makeTask({ id: 2, title: 'Started', status: 'In Progress' }),
+    ]);
+    renderApp('/');
+
+    const unassigned = await select('Status of Unassigned');
+    expect(within(unassigned).getByRole('option', { name: 'To-do' })).toBeEnabled();
+    expect(within(unassigned).getByRole('option', { name: 'In Progress' })).toBeDisabled();
+    expect(within(unassigned).getByRole('option', { name: 'Done' })).toBeDisabled();
+    expect(unassigned).toHaveAccessibleDescription('Assign someone to start this task.');
+
+    // The rule governs leaving To-do only, so an unassigned task already underway can move on.
+    const started = await select('Status of Started');
+    expect(within(started).getByRole('option', { name: 'Done' })).toBeEnabled();
+  });
+
   it('disables Done with an explanation until all subtasks are Done', async () => {
     stubApi({}, [
       makeTask({
         id: 1,
         title: 'Open parent',
+        assignee: CAROL,
         subtasks: [makeTask({ id: 2, title: 'Open child', parentTaskId: 1 })],
       }),
       makeTask({
         id: 3,
         title: 'Ready parent',
+        assignee: CAROL,
         subtasks: [makeTask({ id: 4, title: 'Finished', parentTaskId: 3, status: 'Done' })],
       }),
     ]);
@@ -135,13 +157,13 @@ describe('TaskListPage', () => {
   });
 
   it('updates optimistically and confirms with a toast', async () => {
-    let tasks: Task[] = [makeTask({ id: 1, title: 'Task' })];
+    let tasks: Task[] = [makeTask({ id: 1, title: 'Task', assignee: CAROL })];
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
     const sent = stubApi({
       'GET /tasks': () => ({ body: { data: tasks } }),
       'PATCH /tasks/1': () => {
-        tasks = [makeTask({ id: 1, title: 'Task', status: 'In Progress' })];
+        tasks = [makeTask({ id: 1, title: 'Task', assignee: CAROL, status: 'In Progress' })];
         return { body: { data: tasks[0] } };
       },
     });
@@ -171,7 +193,7 @@ describe('TaskListPage', () => {
           body: { error: { code: 'SUBTASKS_NOT_DONE', message: 'Finish subtasks first.' } },
         }),
       },
-      [makeTask({ id: 1, title: 'Task' })],
+      [makeTask({ id: 1, title: 'Task', assignee: CAROL })],
     );
     renderApp('/');
     await userEvent.selectOptions(await select('Status of Task'), 'Done');

@@ -35,6 +35,21 @@ export function assertSkillsKnown(skillsSource: SkillsSource): void {
   }
 }
 
+/** Work can't start without an owner, so leaving To-do requires an assignee afterwards. */
+export function assertAssignedToStart(
+  currentStatus: TaskStatus,
+  nextStatus: TaskStatus,
+  assigneeAfterUpdate: number | null,
+): void {
+  if (currentStatus === 'To-do' && nextStatus !== 'To-do' && assigneeAfterUpdate === null) {
+    throw new AppError(
+      'conflict',
+      'TASK_UNASSIGNED',
+      'Assign a developer before moving this task out of To-do.',
+    );
+  }
+}
+
 export function assertCanMarkDone(unfinishedSubtasks: { id: number; title: string }[]): void {
   if (unfinishedSubtasks.length > 0) {
     throw new AppError(
