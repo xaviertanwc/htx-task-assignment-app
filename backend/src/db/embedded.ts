@@ -29,6 +29,8 @@ export async function startEmbeddedPostgres(options: EmbeddedOptions): Promise<E
     user,
     password,
     persistent,
+    // PostgreSQL's default, made explicit: the database must never be reachable from outside.
+    postgresFlags: ['-c', 'listen_addresses=localhost'],
     onLog,
     onError: (message) => onLog(String(message)),
   });
